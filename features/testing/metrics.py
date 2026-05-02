@@ -1,5 +1,6 @@
 """Scoring and result writing for the lmf-ollama-obsidian test harness."""
 
+import socket
 import yaml
 from datetime import date
 from pathlib import Path
@@ -51,7 +52,9 @@ def score_results(results: list[dict]) -> dict:
 
 
 def write_results(scores: dict, results: list[dict], model: str,
-                  vault_type: str, output_dir: Path) -> Path:
+                  vault_type: str, output_dir: Path,
+                  inference_host: str | None = None,
+                  gpu_accelerated: bool = False) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     today = date.today().isoformat()
     slug = f"{today}-{model.replace(':', '-')}-{vault_type}"
@@ -64,6 +67,8 @@ def write_results(scores: dict, results: list[dict], model: str,
         "date": today,
         "model": model,
         "vault_type": vault_type,
+        "inference_host": inference_host or socket.gethostname(),
+        "gpu_accelerated": gpu_accelerated,
         "stability_tier": 0,
         **scores,
         "prompt_results": [

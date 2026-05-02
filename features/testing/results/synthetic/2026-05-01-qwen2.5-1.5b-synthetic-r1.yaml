@@ -1,7 +1,9 @@
 avg_response_ms: 12133
 date: '2026-05-01'
+gpu_accelerated: false
 grounding_rate: 0.0
 hallucination_rate: 1.0
+inference_host: TPC-2026-Jared
 model: qwen2.5:1.5b
 prompt_results:
 - id: T001

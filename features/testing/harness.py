@@ -52,6 +52,10 @@ def main():
                         help="Override model from operator/config.yaml")
     parser.add_argument("--models", nargs="+", default=None,
                         help="Compare across multiple models")
+    parser.add_argument("--gpu", action="store_true", default=False,
+                        help="Flag that inference is GPU-accelerated (default: False)")
+    parser.add_argument("--host", default=None,
+                        help="Override inference host name in results (default: hostname)")
     args = parser.parse_args()
 
     config_path = REPO_ROOT / "operator" / "config.yaml"
@@ -94,7 +98,8 @@ def main():
         scores = score_results(results)
 
         out_dir = Path(__file__).parent / "results" / vault_type
-        out_path = write_results(scores, results, model, vault_type, out_dir)
+        out_path = write_results(scores, results, model, vault_type, out_dir,
+                                 inference_host=args.host, gpu_accelerated=args.gpu)
 
         print(f"\n  tool_accuracy:       {scores['tool_accuracy']:.0%}")
         print(f"  grounding_rate:      {scores['grounding_rate']:.0%}")

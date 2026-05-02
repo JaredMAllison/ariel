@@ -121,6 +121,30 @@ def test_write_results_creates_yaml(tmp_path):
     assert "-r1.yaml" in out.name
 
 
+def test_write_results_records_hardware_defaults(tmp_path):
+    import socket
+    results = [_make_result("T001", "tool_exercise", "ok", tool_calls_made=["search_vault"],
+                             expected_tool="search_vault")]
+    scores = score_results(results)
+    out = write_results(scores, results, model="qwen2.5:1.5b",
+                        vault_type="synthetic", output_dir=tmp_path)
+    data = yaml.safe_load(out.read_text())
+    assert data["inference_host"] == socket.gethostname()
+    assert data["gpu_accelerated"] is False
+
+
+def test_write_results_records_hardware_override(tmp_path):
+    results = [_make_result("T001", "tool_exercise", "ok", tool_calls_made=["search_vault"],
+                             expected_tool="search_vault")]
+    scores = score_results(results)
+    out = write_results(scores, results, model="qwen2.5:1.5b",
+                        vault_type="synthetic", output_dir=tmp_path,
+                        inference_host="jared-pc", gpu_accelerated=True)
+    data = yaml.safe_load(out.read_text())
+    assert data["inference_host"] == "jared-pc"
+    assert data["gpu_accelerated"] is True
+
+
 def test_write_results_run_counter_increments(tmp_path):
     results = [_make_result("T001", "tool_exercise", "ok", tool_calls_made=["search_vault"],
                              expected_tool="search_vault")]
