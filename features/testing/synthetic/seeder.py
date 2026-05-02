@@ -4,7 +4,6 @@
 import re
 import yaml
 from pathlib import Path
-from datetime import date
 
 
 def _slugify(title: str) -> str:
