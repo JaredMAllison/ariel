@@ -7,7 +7,9 @@
 - id: T001
   type: tool_exercise
   query: "What tasks are currently queued in the vault?"
-  expected_tool: search_vault
+  expected_tool:
+    - search_vault
+    - grep_vault
 
 - id: T002
   type: tool_exercise

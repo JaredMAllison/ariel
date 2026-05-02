@@ -19,10 +19,7 @@ def score_results(results: list[dict]) -> dict:
     hallucination = [r for r in results if r["type"] == "hallucination_boundary"]
     enforcement = [r for r in results if r["type"] == "tool_enforcement"]
 
-    tool_hits = sum(
-        1 for r in tool_exercise
-        if r.get("expected_tool") in r.get("tool_calls_made", [])
-    )
+    tool_hits = sum(1 for r in tool_exercise if _tool_exercise_passed(r))
     tool_accuracy = tool_hits / len(tool_exercise) if tool_exercise else 0.0
 
     grounding_hits = sum(
@@ -73,6 +70,7 @@ def write_results(scores: dict, results: list[dict], model: str,
                 "tool_calls_made": r.get("tool_calls_made", []),
                 "response_ms": r["response_ms"],
                 "passed": _prompt_passed(r),
+                "response": r.get("response", ""),
             }
             for r in results
         ],
@@ -82,10 +80,18 @@ def write_results(scores: dict, results: list[dict], model: str,
     return out_path
 
 
+def _tool_exercise_passed(result: dict) -> bool:
+    expected = result.get("expected_tool")
+    made = set(result.get("tool_calls_made", []))
+    if isinstance(expected, list):
+        return bool(set(expected) & made)
+    return expected in made
+
+
 def _prompt_passed(result: dict) -> bool:
     t = result["type"]
     if t == "tool_exercise":
-        return result.get("expected_tool") in result.get("tool_calls_made", [])
+        return _tool_exercise_passed(result)
     if t == "grounding":
         term = result.get("grounding_term", "")
         return term.lower() in result["response"].lower()

@@ -89,6 +89,24 @@ def test_tool_enforcement_fail():
     assert scores["tool_enforcement_pass"] is False
 
 
+def test_tool_accuracy_list_hit():
+    results = [
+        _make_result("T001", "tool_exercise", "found it",
+                     tool_calls_made=["grep_vault"], expected_tool=["search_vault", "grep_vault"]),
+    ]
+    scores = score_results(results)
+    assert scores["tool_accuracy"] == 1.0
+
+
+def test_tool_accuracy_list_miss():
+    results = [
+        _make_result("T001", "tool_exercise", "found it",
+                     tool_calls_made=["outline"], expected_tool=["search_vault", "grep_vault"]),
+    ]
+    scores = score_results(results)
+    assert scores["tool_accuracy"] == 0.0
+
+
 def test_write_results_creates_yaml(tmp_path):
     results = [_make_result("T001", "tool_exercise", "ok", tool_calls_made=["search_vault"],
                              expected_tool="search_vault")]
@@ -101,3 +119,4 @@ def test_write_results_creates_yaml(tmp_path):
     assert data["model"] == "qwen2.5:1.5b"
     assert data["vault_type"] == "synthetic"
     assert "tool_accuracy" in data
+    assert data["prompt_results"][0]["response"] == "ok"
