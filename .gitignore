@@ -1,0 +1,6 @@
+operator/config.yaml
+features/testing/results/operator/
+features/testing/synthetic/vault/
+__pycache__/
+*.pyc
+.pytest_cache/
