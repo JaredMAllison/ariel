@@ -41,17 +41,39 @@ except ImportError as _e:
 
 from build_prompt import build_prompt
 
-OLLAMA_URL        = "http://localhost:11434/api/chat"
-OLLAMA_PS_URL     = "http://localhost:11434/api/ps"
-OLLAMA_MODEL      = "qwen2.5:1.5b"
-OLLAMA_TIMEOUT    = 300  # seconds — default; can be overridden per-request via timeout_s in POST /chat
-OLLAMA_NUM_CTX    = 8192  # context window; default 4096 is too small for our system prompt (~5500 tokens)
+def load_config(config_path: Path | None = None) -> dict:
+    """Load operator config from YAML. Calls sys.exit if the file is missing."""
+    if config_path is None:
+        config_path = Path(__file__).parent.parent / "operator" / "config.yaml"
+    if not config_path.exists():
+        sys.exit("[orchestrator] No operator config found — run python3 init.py to set up.")
+    return yaml.safe_load(config_path.read_text(encoding="utf-8"))
+
+
+# Sentinel values — overwritten by _init_config() at startup, never at import time
+OLLAMA_URL        = ""
+OLLAMA_PS_URL     = ""
+OLLAMA_MODEL      = ""
+OLLAMA_TIMEOUT    = 300
+OLLAMA_NUM_CTX    = 8192
 MAX_HISTORY_TURNS = 10    # max user+assistant pairs kept; oldest dropped when exceeded
 MAX_TOOL_LOOPS    = 5     # max tool call rounds per turn before forcing a text response
 HOST              = "0.0.0.0"
 PORT              = 8742
 SKILLS_DIR        = "System/Skills"
-UI_FILE           = Path(__file__).parent / "ui" / "ariel.html"
+UI_FILE           = Path(__file__).parent.parent / "features" / "ui" / "ariel.html"
+
+
+def _init_config(config_path: Path | None = None) -> None:
+    """Read operator config and populate runtime globals. Called only inside run()."""
+    global OLLAMA_URL, OLLAMA_PS_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT, OLLAMA_NUM_CTX, PORT
+    cfg = load_config(config_path)
+    OLLAMA_URL     = cfg["ollama_url"]
+    OLLAMA_PS_URL  = cfg["ollama_url"].replace("/api/chat", "/api/ps")
+    OLLAMA_MODEL   = cfg["model"]
+    OLLAMA_TIMEOUT = int(cfg["timeout_s"])
+    OLLAMA_NUM_CTX = int(cfg["num_ctx"])
+    PORT           = int(cfg["port"])
 
 
 def load_skill(vault: Path, name: str) -> str | None:
@@ -391,6 +413,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def run(vault_path: str):
+    _init_config()
     orch = Orchestrator(vault_path)
     Handler.orchestrator = orch
     server = HTTPServer((HOST, PORT), Handler)
@@ -401,5 +424,6 @@ def run(vault_path: str):
 
 
 if __name__ == "__main__":
-    vault = sys.argv[1] if len(sys.argv) > 1 else str(Path.home() / "Documents/Obsidian/Marlin")
+    _cfg = load_config()
+    vault = sys.argv[1] if len(sys.argv) > 1 else _cfg.get("vault_path", str(Path.home() / "Documents/Obsidian/Marlin"))
     run(vault)
