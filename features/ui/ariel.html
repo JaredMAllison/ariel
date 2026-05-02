@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ariel — local</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        oklch(0.18 0.008 60);
+    --bg-1:      oklch(0.21 0.009 60);
+    --bg-2:      oklch(0.24 0.010 60);
+    --bg-3:      oklch(0.28 0.011 60);
+    --line:      oklch(0.32 0.010 60 / 0.5);
+    --line-soft: oklch(0.32 0.010 60 / 0.25);
+    --ink:       oklch(0.94 0.012 75);
+    --ink-2:     oklch(0.78 0.012 75);
+    --ink-3:     oklch(0.60 0.010 75);
+    --ink-4:     oklch(0.45 0.010 75);
+    --tan:       oklch(0.78 0.06 75);
+    --tan-dim:   oklch(0.78 0.06 75 / 0.35);
+    --tan-faint: oklch(0.78 0.06 75 / 0.14);
+    --good:      oklch(0.78 0.10 145);
+    --warn:      oklch(0.76 0.13 55);
+    --bad:       oklch(0.66 0.16 25);
+    --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --r-sm: 6px;
+    --r-md: 10px;
+    --r-lg: 14px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  button { font: inherit; color: inherit; }
+
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    background-image:
+      radial-gradient(1100px 700px at 8% -10%, oklch(0.24 0.014 70 / 0.6), transparent 60%),
+      radial-gradient(900px 600px at 100% 110%, oklch(0.22 0.012 60 / 0.5), transparent 55%);
+    z-index: 0;
+  }
+  #app { position: relative; z-index: 1; height: 100%; }
+
+  :focus-visible {
+    outline: 1px solid var(--tan);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  @keyframes arielPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+</style>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+  <div id="app"></div>
+
+<!-- ═══════════════════════════════════════════════════════
+     1 · Context Meter
+════════════════════════════════════════════════════════ -->
+<script type="text/babel">
+const fmtTok = (n) => {
+  if (n == null) return "—";
+  if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k";
+  return String(n);
+};
+const fmtPct = (p) => (p * 100).toFixed(p < 0.1 ? 1 : 0) + "%";
+const tokensFromHistoryTurns = (turns) => Math.round(turns * 240);
+
+function useMeterValues(status) {
+  const sys = status.system_prompt_tokens_est || 0;
+  const hist = tokensFromHistoryTurns(status.history_turns || 0);
+  const total = status.num_ctx || 1;
+  const used = sys + hist;
+  const pct = Math.min(used / total, 1);
+  const sysPct = sys / total;
+  const histPct = hist / total;
+  const remaining = Math.max(total - used, 0);
+  const isWarn = pct >= 0.8;
+  const isCrit = pct >= 0.95;
+  const perTurn = 240;
+  const remainingTurns = Math.max(0, Math.floor(remaining / perTurn));
+  return { sys, hist, total, used, pct, sysPct, histPct, remaining, remainingTurns, isWarn, isCrit };
+}
+
+const meterStyles = {
+  wrap: { display: "flex", flexDirection: "column", gap: 8 },
+  header: { display: "flex", alignItems: "baseline", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "0.02em" },
+  headLabel: { color: "var(--ink-3)", textTransform: "uppercase", fontSize: 10, letterSpacing: "0.08em" },
+  headRight: { color: "var(--ink-2)", fontVariantNumeric: "tabular-nums" },
+  legend: { display: "flex", gap: 14, fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--ink-3)", letterSpacing: "0.01em" },
+  legendDot: (color) => ({ display: "inline-block", width: 8, height: 8, background: color, marginRight: 6, verticalAlign: "middle", borderRadius: 1 }),
+  footer: { display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--ink-4)", letterSpacing: "0.01em" },
+};
+
+function MeterStacked({ v, warn }) {
+  const histColor = warn ? "var(--warn)" : "var(--tan)";
+  return (
+    <div style={meterStyles.wrap}>
+      <div style={meterStyles.header}>
+        <span style={meterStyles.headLabel}>Context</span>
+        <span style={meterStyles.headRight}>
+          <span style={{ color: warn ? "var(--warn)" : "var(--ink)" }}>{fmtTok(v.used)}</span>
+          <span style={{ color: "var(--ink-4)" }}> / {fmtTok(v.total)} tok</span>
+        </span>
+      </div>
+      <div style={{ position: "relative", height: 10, background: "rgba(0,0,0,0.35)", border: "0.5px solid var(--line-soft)", borderRadius: 2, overflow: "hidden" }}>
+        {[0.25, 0.5, 0.75].map((t) => (
+          <div key={t} style={{ position: "absolute", top: 0, bottom: 0, left: `${t * 100}%`, width: 1, background: "rgba(255,255,255,0.04)" }} />
+        ))}
+        <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: `${v.sysPct * 100}%`, background: "repeating-linear-gradient(135deg, oklch(0.42 0.010 75 / 0.55) 0 4px, oklch(0.42 0.010 75 / 0.35) 4px 8px)" }} />
+        <div style={{ position: "absolute", top: 0, bottom: 0, left: `${v.sysPct * 100}%`, width: `${v.histPct * 100}%`, background: histColor, transition: "width 400ms ease, background 200ms ease" }} />
+        <div style={{ position: "absolute", top: -2, bottom: -2, left: "80%", width: 1, background: warn ? "var(--warn)" : "rgba(255,255,255,0.12)" }} />
+      </div>
+      <div style={meterStyles.legend}>
+        <span><span style={meterStyles.legendDot("repeating-linear-gradient(135deg, oklch(0.42 0.010 75 / 0.55) 0 3px, oklch(0.42 0.010 75 / 0.35) 3px 6px)")}></span>system {fmtTok(v.sys)}</span>
+        <span><span style={meterStyles.legendDot(histColor)}></span>history {fmtTok(v.hist)}</span>
+        <span style={{ marginLeft: "auto", color: "var(--ink-4)" }}>{fmtPct(v.pct)}</span>
+      </div>
+    </div>
+  );
+}
+
+function ResponseSparkline({ values }) {
+  if (!values || values.length < 2) return null;
+  const w = 100, h = 22;
+  const max = Math.max(...values);
+  const min = Math.min(...values);
+  const span = Math.max(max - min, 1);
+  const pts = values.map((v, i) => {
+    const x = (i / (values.length - 1)) * w;
+    const y = h - ((v - min) / span) * (h - 4) - 2;
+    return [x, y];
+  });
+  const path = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+  const last = pts[pts.length - 1];
+  return (
+    <svg width="100%" height={h + 2} viewBox={`0 0 ${w} ${h + 2}`} preserveAspectRatio="none" style={{ display: "block" }}>
+      <path d={path} fill="none" stroke="var(--tan)" strokeWidth="0.9" vectorEffect="non-scaling-stroke" />
+      <circle cx={last[0]} cy={last[1]} r="1.4" fill="var(--tan)" />
+    </svg>
+  );
+}
+
+function ContextMeter({ status, history, showWarning, showRemaining }) {
+  const v = useMeterValues(status);
+  const warn = v.isWarn;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "14px 14px 12px", background: "var(--bg-2)", border: "0.5px solid var(--line)", borderRadius: "var(--r-md)" }}>
+      <MeterStacked v={v} warn={warn} />
+      {showRemaining && (
+        <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--ink-4)", paddingTop: 8, borderTop: "0.5px dashed var(--line-soft)" }}>
+          <span>~{v.remainingTurns} turns left</span>
+          <span>at ~240 tok/turn</span>
+        </div>
+      )}
+      {showWarning && warn && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--warn)", padding: "6px 8px", background: "oklch(0.76 0.13 55 / 0.08)", border: "0.5px solid oklch(0.76 0.13 55 / 0.3)", borderRadius: 4 }}>
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--warn)", flexShrink: 0 }} />
+          <span>context {v.isCrit ? "critically " : ""}full — consider /reset</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+Object.assign(window, { ContextMeter, useMeterValues, ResponseSparkline, fmtTok, fmtPct });
+</script>
+
+<!-- ═══════════════════════════════════════════════════════
+     2 · Status Panel
+════════════════════════════════════════════════════════ -->
+<script type="text/babel">
+const sStyles = {
+  panel: { width: "100%", height: "100%", background: "var(--bg-1)", borderRight: "0.5px solid var(--line)", display: "flex", flexDirection: "column", overflow: "hidden" },
+  header: { padding: "18px 18px 14px", borderBottom: "0.5px solid var(--line-soft)", display: "flex", flexDirection: "column", gap: 4 },
+  brand: { display: "flex", alignItems: "center", gap: 10 },
+  sigil: { width: 22, height: 22, flexShrink: 0 },
+  brandName: { fontFamily: "var(--font-sans)", fontSize: 14, fontWeight: 500, letterSpacing: "0.005em", color: "var(--ink)" },
+  brandSub: { fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--ink-4)", letterSpacing: "0.05em", textTransform: "uppercase", marginTop: 2 },
+  body: { flex: 1, overflowY: "auto", padding: "14px", display: "flex", flexDirection: "column", gap: 12 },
+  sectionTitle: { fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--ink-4)", textTransform: "uppercase", letterSpacing: "0.1em", padding: "4px 0 2px" },
+  stat: { display: "flex", justifyContent: "space-between", alignItems: "baseline", fontFamily: "var(--font-mono)", fontSize: 12, padding: "4px 0" },
+  statLabel: { color: "var(--ink-3)" },
+  statVal: { color: "var(--ink)", fontVariantNumeric: "tabular-nums" },
+  card: { padding: "12px 14px", background: "var(--bg-2)", border: "0.5px solid var(--line)", borderRadius: "var(--r-md)" },
+};
+
+function Sigil() {
+  return (
+    <svg style={sStyles.sigil} viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round">
+      <circle cx="11" cy="11" r="7.5" stroke="var(--tan)" />
+      <path d="M11 4 L11 18" stroke="var(--tan-dim)" />
+      <circle cx="11" cy="11" r="2" fill="var(--tan)" stroke="none" />
+    </svg>
+  );
+}
+
+function StatusDot({ ok, warn, anim }) {
+  const color = ok ? "var(--good)" : warn ? "var(--warn)" : "var(--bad)";
+  return (
+    <span style={{
+      display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: color,
+      boxShadow: `0 0 0 2px ${ok ? "oklch(0.78 0.10 145 / 0.15)" : warn ? "oklch(0.76 0.13 55 / 0.15)" : "oklch(0.66 0.16 25 / 0.15)"}`,
+      animation: anim ? "arielPulse 1.6s ease-in-out infinite" : "none",
+      verticalAlign: "middle", marginRight: 8,
+    }} />
+  );
+}
+
+function useTicker(active, since) {
+  const [, setTick] = React.useState(0);
+  React.useEffect(() => {
+    if (!active) return;
+    const id = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [active]);
+  if (!since) return "—";
+  const ms = Date.now() - since;
+  if (ms < 1000) return `${ms}ms`;
+  const s = ms / 1000;
+  if (s < 60) return `${s.toFixed(0)}s`;
+  const m = Math.floor(s / 60);
+  const r = Math.floor(s % 60);
+  return `${m}m ${r}s`;
+}
+
+function StatusPanel({ status, lastResponseAt, responseHistory, tweaks, onReset, timeoutS, onTimeoutChange }) {
+  const ollamaOk = status.ollama === "ok";
+  const orchOk = status.orchestrator === "ok";
+  const since = useTicker(true, lastResponseAt);
+
+  const minMs = responseHistory.length ? Math.min(...responseHistory) : null;
+  const maxMs = responseHistory.length ? Math.max(...responseHistory) : null;
+  const avgMs = responseHistory.length ? Math.round(responseHistory.reduce((a, b) => a + b, 0) / responseHistory.length) : null;
+
+  return (
+    <aside style={sStyles.panel}>
+      <header style={sStyles.header}>
+        <div style={sStyles.brand}>
+          <Sigil />
+          <div>
+            <div style={sStyles.brandName}>Ariel von Marlin</div>
+            <div style={sStyles.brandSub}>local · ollama</div>
+          </div>
+        </div>
+      </header>
+
+      <div style={sStyles.body}>
+        <ContextMeter status={status} history={responseHistory} showWarning={tweaks.showWarnings} showRemaining={tweaks.showRemainingTurns} />
+
+        <div style={sStyles.card}>
+          <div style={sStyles.sectionTitle}>Runtime</div>
+          <div style={sStyles.stat}>
+            <span style={sStyles.statLabel}>model</span>
+            <span style={sStyles.statVal}>{status.model}</span>
+          </div>
+          <div style={sStyles.stat}>
+            <span style={sStyles.statLabel}>loaded</span>
+            <span style={sStyles.statVal}>
+              <StatusDot ok={status.model_loaded} warn={!status.model_loaded} />
+              {status.model_loaded ? "yes" : "no"}
+            </span>
+          </div>
+          <div style={sStyles.stat}>
+            <span style={sStyles.statLabel}>num_ctx</span>
+            <span style={sStyles.statVal}>{(status.num_ctx || 0).toLocaleString()}</span>
+          </div>
+          <div style={sStyles.stat}>
+            <span style={sStyles.statLabel}>ollama</span>
+            <span style={sStyles.statVal}>
+              <StatusDot ok={ollamaOk} />
+              {ollamaOk ? "ok" : "unreachable"}
+            </span>
+          </div>
+          <div style={sStyles.stat}>
+            <span style={sStyles.statLabel}>orchestrator</span>
+            <span style={sStyles.statVal}>
+              <StatusDot ok={orchOk} />
+              {orchOk ? "ok" : "offline"}
+            </span>
+          </div>
+        </div>
+
+        <div style={sStyles.card}>
+          <div style={sStyles.sectionTitle}>Knowledge</div>
+          <div style={sStyles.stat}>
+            <span style={sStyles.statLabel}>system prompt</span>
+            <span style={sStyles.statVal}>
+              {(status.system_prompt_chars || 0).toLocaleString()}<span style={{ color: "var(--ink-4)" }}>ch</span>
+              <span style={{ color: "var(--ink-4)", margin: "0 4px" }}>·</span>
+              ~{fmtTok(status.system_prompt_tokens_est)}<span style={{ color: "var(--ink-4)" }}>t</span>
+            </span>
+          </div>
+          <div style={sStyles.stat}>
+            <span style={sStyles.statLabel}>memory files</span>
+            <span style={sStyles.statVal}>{status.memory_files_loaded}</span>
+          </div>
+          <div style={sStyles.stat}>
+            <span style={sStyles.statLabel}>skills indexed</span>
+            <span style={sStyles.statVal}>{status.skills_in_index}</span>
+          </div>
+          <div style={sStyles.stat}>
+            <span style={sStyles.statLabel}>history</span>
+            <span style={sStyles.statVal}>{status.history_turns} turns</span>
+          </div>
+        </div>
+
+        <div style={sStyles.card}>
+          <div style={sStyles.sectionTitle}>Response timing</div>
+          <div style={sStyles.stat}>
+            <span style={sStyles.statLabel}>last</span>
+            <span style={sStyles.statVal}>
+              {status.last_response_ms ? `${(status.last_response_ms / 1000).toFixed(2)}s` : "—"}
+            </span>
+          </div>
+          <div style={sStyles.stat}>
+            <span style={sStyles.statLabel}>since</span>
+            <span style={sStyles.statVal}>{since}</span>
+          </div>
+          {tweaks.showSparkline && responseHistory.length > 1 && (
+            <div style={{ padding: "6px 0 2px" }}>
+              <ResponseSparkline values={responseHistory} />
+              <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--ink-4)", marginTop: 4, fontVariantNumeric: "tabular-nums" }}>
+                <span>min {(minMs / 1000).toFixed(1)}s</span>
+                <span>avg {(avgMs / 1000).toFixed(1)}s</span>
+                <span>max {(maxMs / 1000).toFixed(1)}s</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div style={{ flex: 1 }} />
+
+        {timeoutS !== undefined && (
+          <div style={{ padding: "10px 14px", background: "var(--bg-2)", border: "0.5px solid var(--line)", borderRadius: "var(--r-md)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--ink-4)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>
+              <span>timeout</span>
+              <span style={{ color: "var(--ink-3)" }}>{timeoutS}s</span>
+            </div>
+            <input type="range" min="30" max="600" step="30" value={timeoutS}
+              onChange={(e) => onTimeoutChange(parseInt(e.target.value, 10))}
+              style={{ width: "100%", accentColor: "var(--tan)", cursor: "pointer" }}
+            />
+            <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--ink-4)", marginTop: 4 }}>
+              <span>30s</span><span>5m</span><span>10m</span>
+            </div>
+          </div>
+        )}
+
+        <button onClick={onReset} style={{
+          appearance: "none", border: "0.5px solid var(--line)", background: "transparent",
+          color: "var(--ink-3)", fontFamily: "var(--font-mono)", fontSize: 11,
+          padding: "8px 10px", borderRadius: 6, cursor: "pointer",
+          letterSpacing: "0.04em", textTransform: "uppercase",
+          transition: "border 200ms, color 200ms",
+        }}
+        onMouseEnter={e => { e.currentTarget.style.color = "var(--ink)"; e.currentTarget.style.borderColor = "var(--tan-dim)"; }}
+        onMouseLeave={e => { e.currentTarget.style.color = "var(--ink-3)"; e.currentTarget.style.borderColor = "var(--line)"; }}
+        >
+          ↺ reset conversation
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+Object.assign(window, { StatusPanel, useTicker });
+</script>
+
+<!-- ═══════════════════════════════════════════════════════
+     3 · Chat Panel
+════════════════════════════════════════════════════════ -->
+<script type="text/babel">
+const cStyles = {
+  panel: { width: "100%", height: "100%", display: "flex", flexDirection: "column", overflow: "hidden", background: "transparent" },
+  header: { height: 52, flexShrink: 0, padding: "0 22px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "0.5px solid var(--line-soft)" },
+  headerTitle: { fontFamily: "var(--font-sans)", fontSize: 13, color: "var(--ink-2)", letterSpacing: "0.005em" },
+  headerMeta: { fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--ink-4)", letterSpacing: "0.05em", textTransform: "uppercase" },
+  scroll: { flex: 1, overflowY: "auto", padding: "28px 22px 16px" },
+  list: { maxWidth: 720, margin: "0 auto", display: "flex", flexDirection: "column", gap: 22 },
+  msgRow: (mine) => ({ display: "flex", flexDirection: "column", alignItems: mine ? "flex-end" : "flex-start", gap: 6 }),
+  msgMeta: (mine) => ({ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--ink-4)", letterSpacing: "0.06em", textTransform: "uppercase", paddingLeft: mine ? 0 : 2, paddingRight: mine ? 2 : 0 }),
+  bubble: (mine) => ({ maxWidth: "78%", padding: mine ? "10px 14px" : "0", background: mine ? "var(--bg-2)" : "transparent", border: mine ? "0.5px solid var(--line)" : "none", borderRadius: mine ? 12 : 0, color: "var(--ink)", fontSize: 14.5, lineHeight: 1.55, fontFamily: "var(--font-sans)", textWrap: "pretty", whiteSpace: "pre-wrap" }),
+  inputWrap: { flexShrink: 0, padding: "12px 22px 18px", borderTop: "0.5px solid var(--line-soft)", background: "linear-gradient(to bottom, transparent, oklch(0.18 0.008 60 / 0.4))" },
+  inputCard: { maxWidth: 720, margin: "0 auto", display: "flex", alignItems: "flex-end", gap: 10, padding: "10px 12px", background: "var(--bg-2)", border: "0.5px solid var(--line)", borderRadius: 12, transition: "border-color 180ms" },
+  textarea: { flex: 1, appearance: "none", border: 0, outline: 0, background: "transparent", color: "var(--ink)", font: "14.5px/1.5 var(--font-sans)", resize: "none", minHeight: 22, maxHeight: 200, padding: "4px 0" },
+  iconBtn: (active) => ({ appearance: "none", border: 0, background: active ? "var(--tan)" : "transparent", color: active ? "var(--bg)" : "var(--ink-3)", width: 32, height: 32, borderRadius: 8, cursor: active ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", transition: "background 180ms, color 180ms", flexShrink: 0 }),
+  inputFoot: { maxWidth: 720, margin: "6px auto 0", display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--ink-4)", letterSpacing: "0.04em" },
+};
+
+function BreathingWave({ width = 64, height = 18, color = "var(--tan)" }) {
+  const [t, setT] = React.useState(0);
+  React.useEffect(() => {
+    let raf;
+    const start = performance.now();
+    const tick = (now) => { setT((now - start) / 1000); raf = requestAnimationFrame(tick); };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  const w = width, h = height, mid = h / 2;
+  const breath = 0.5 + 0.5 * Math.sin(t * 1.1);
+  const amp = 1.5 + breath * 4.5;
+  const phase = t * 1.6;
+  const segs = 40;
+  const pts = [];
+  for (let i = 0; i <= segs; i++) {
+    const x = (i / segs) * w;
+    const damp = Math.sin((i / segs) * Math.PI);
+    const y = mid + Math.sin((i / segs) * Math.PI * 2 + phase) * amp * damp;
+    pts.push([x, y]);
+  }
+  const d = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(" ");
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ display: "block" }}>
+      <path d={d} fill="none" stroke={color} strokeWidth="1.25" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
+
+function ThinkingRow() {
+  return (
+    <div style={cStyles.msgRow(false)}>
+      <div style={cStyles.msgMeta(false)}>Ariel · thinking</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "2px 2px" }}>
+        <BreathingWave />
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--ink-4)", letterSpacing: "0.04em" }}>inferring…</span>
+      </div>
+    </div>
+  );
+}
+
+function MessageRow({ msg }) {
+  const mine = msg.role === "user";
+  return (
+    <div style={cStyles.msgRow(mine)}>
+      <div style={cStyles.msgMeta(mine)}>{mine ? "you" : "Ariel"}</div>
+      <div style={cStyles.bubble(mine)}>{msg.text}</div>
+    </div>
+  );
+}
+
+function ChatPanel({ messages, thinking, onSend, onReset, status, error }) {
+  const [draft, setDraft] = React.useState("");
+  const [focused, setFocused] = React.useState(false);
+  const [holdReset, setHoldReset] = React.useState(false);
+  const [holdProgress, setHoldProgress] = React.useState(0);
+  const scrollRef = React.useRef(null);
+  const taRef = React.useRef(null);
+  const holdRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages.length, thinking]);
+
+  React.useEffect(() => {
+    const el = taRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 200) + "px";
+  }, [draft]);
+
+  const canSend = draft.trim().length > 0 && !thinking && status.ollama === "ok";
+
+  const submit = () => {
+    if (!canSend) return;
+    onSend(draft.trim());
+    setDraft("");
+  };
+
+  const onKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); }
+  };
+
+  const startHold = () => {
+    setHoldReset(true);
+    const start = performance.now();
+    const tick = () => {
+      const p = Math.min((performance.now() - start) / 1200, 1);
+      setHoldProgress(p);
+      if (p >= 1) { cancelHold(); onReset(); }
+      else { holdRef.current = requestAnimationFrame(tick); }
+    };
+    holdRef.current = requestAnimationFrame(tick);
+  };
+  const cancelHold = () => {
+    setHoldReset(false);
+    setHoldProgress(0);
+    if (holdRef.current) cancelAnimationFrame(holdRef.current);
+  };
+
+  const ollamaDown = status.ollama !== "ok";
+  const orchDown = status.orchestrator !== "ok";
+
+  return (
+    <section style={cStyles.panel}>
+      <header style={cStyles.header}>
+        <div style={cStyles.headerTitle}>conversation</div>
+        <div style={cStyles.headerMeta}>{messages.length} {messages.length === 1 ? "message" : "messages"}</div>
+      </header>
+
+      {(ollamaDown || orchDown || error) && (
+        <div style={{ padding: "10px 22px", borderBottom: "0.5px solid oklch(0.66 0.16 25 / 0.3)", background: "oklch(0.66 0.16 25 / 0.06)", color: "var(--bad)", fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "0.02em" }}>
+          {orchDown && "orchestrator offline — check that python orchestrator.py is running"}
+          {!orchDown && ollamaDown && "ollama unreachable — sending disabled"}
+          {!orchDown && !ollamaDown && error}
+        </div>
+      )}
+
+      <div ref={scrollRef} style={cStyles.scroll}>
+        <div style={cStyles.list}>
+          {messages.map((m, i) => <MessageRow key={i} msg={m} />)}
+          {thinking && <ThinkingRow />}
+        </div>
+      </div>
+
+      <div style={cStyles.inputWrap}>
+        <div style={{ ...cStyles.inputCard, borderColor: focused ? "var(--tan-dim)" : "var(--line)" }}>
+          <button
+            onMouseDown={startHold} onMouseUp={cancelHold} onMouseLeave={cancelHold}
+            onTouchStart={(e) => { e.preventDefault(); startHold(); }} onTouchEnd={cancelHold}
+            title="Hold to reset conversation" aria-label="Hold to reset conversation"
+            style={{ appearance: "none", border: "0.5px solid var(--line)", background: holdReset ? "oklch(0.66 0.16 25 / 0.1)" : "transparent", color: holdReset ? "var(--bad)" : "var(--ink-4)", width: 32, height: 32, borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, position: "relative", overflow: "hidden", transition: "color 200ms, background 200ms" }}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 7 a5 5 0 1 0 1.5 -3.5" /><path d="M2 2 L2 4 L4 4" />
+            </svg>
+            {holdReset && <div style={{ position: "absolute", bottom: 0, left: 0, height: 2, width: `${holdProgress * 100}%`, background: "var(--bad)", transition: "width 60ms linear" }} />}
+          </button>
+
+          <textarea ref={taRef} value={draft} onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={onKeyDown} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+            placeholder={ollamaDown ? "ollama is unreachable…" : "ask Ariel something…"}
+            disabled={ollamaDown} rows={1} style={cStyles.textarea}
+          />
+
+          <button onClick={submit} disabled={!canSend} aria-label="Send" style={cStyles.iconBtn(canSend)}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 7 L12 7" /><path d="M8 3 L12 7 L8 11" />
+            </svg>
+          </button>
+        </div>
+        <div style={cStyles.inputFoot}>
+          <span>{thinking ? "Ariel is thinking — send disabled" : "↵ send · ⇧↵ newline"}</span>
+          <span>hold ↺ to reset</span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+Object.assign(window, { ChatPanel });
+</script>
+
+<!-- ═══════════════════════════════════════════════════════
+     4 · App — production (real API, responsive layout)
+════════════════════════════════════════════════════════ -->
+<script type="text/babel">
+const API = "http://localhost:8742";
+
+const NULL_STATUS = {
+  orchestrator: "offline",
+  ollama: "unreachable",
+  model: "—",
+  model_loaded: false,
+  num_ctx: 8192,
+  system_prompt_chars: 0,
+  system_prompt_tokens_est: 0,
+  memory_files_loaded: 0,
+  skills_in_index: 0,
+  history_turns: 0,
+  inference_in_progress: false,
+  last_response_ms: null,
+};
+
+function useLayout() {
+  const get = () => {
+    if (window.innerWidth >= 768) return "desktop";
+    return window.matchMedia("(orientation: portrait)").matches ? "phonePortrait" : "phoneLandscape";
+  };
+  const [layout, setLayout] = React.useState(get);
+  React.useEffect(() => {
+    const update = () => setLayout(get());
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", update);
+    };
+  }, []);
+  return layout;
+}
+
+function CompactStatusStrip({ status, lastResponseAt }) {
+  const v = useMeterValues(status);
+  const since = useTicker(true, lastResponseAt);
+  return (
+    <div style={{ padding: "10px 12px", borderBottom: "0.5px solid var(--line-soft)", background: "var(--bg-1)", display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <svg width="16" height="16" viewBox="0 0 22 22" fill="none">
+            <circle cx="11" cy="11" r="7.5" stroke="var(--tan)" strokeWidth="1" />
+            <circle cx="11" cy="11" r="2" fill="var(--tan)" />
+          </svg>
+          <span style={{ fontSize: 12, color: "var(--ink)" }}>Ariel</span>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--ink-4)" }}>· {status.model}</span>
+        </div>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: status.last_response_ms ? "var(--ink-3)" : "var(--ink-4)" }}>
+          {status.last_response_ms ? `${(status.last_response_ms / 1000).toFixed(1)}s` : "—"}
+        </span>
+      </div>
+      <div style={{ position: "relative", height: 4, background: "rgba(0,0,0,0.4)", borderRadius: 2, overflow: "hidden" }}>
+        <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: `${v.sysPct * 100}%`, background: "var(--ink-4)" }} />
+        <div style={{ position: "absolute", top: 0, bottom: 0, left: `${v.sysPct * 100}%`, width: `${v.histPct * 100}%`, background: v.isWarn ? "var(--warn)" : "var(--tan)" }} />
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--ink-4)" }}>
+        <span>{fmtTok(v.used)}/{fmtTok(v.total)} ctx</span>
+        <span>{status.history_turns} turns · {status.skills_in_index} skills · {since}</span>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const layout = useLayout();
+  const [status, setStatus] = React.useState({ ...NULL_STATUS });
+  const [messages, setMessages] = React.useState([]);
+  const [responseHistory, setResponseHistory] = React.useState([]);
+  const [lastResponseAt, setLastResponseAt] = React.useState(null);
+  const [error, setError] = React.useState(null);
+  const prevLastMs = React.useRef(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const r = await fetch(`${API}/status`);
+        if (!r.ok) throw new Error();
+        const data = await r.json();
+        if (!cancelled) setStatus(data);
+      } catch {
+        if (!cancelled) setStatus(s => ({ ...s, orchestrator: "offline", ollama: "unreachable" }));
+      }
+    };
+    poll();
+    const id = setInterval(poll, 2000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
+  React.useEffect(() => {
+    const cur = status.last_response_ms;
+    if (cur != null && cur !== prevLastMs.current) {
+      prevLastMs.current = cur;
+      setResponseHistory(h => [...h.slice(-9), cur]);
+      setLastResponseAt(Date.now());
+    }
+  }, [status.last_response_ms]);
+
+  const onSend = async (text, timeoutS = 300) => {
+    setMessages(m => [...m, { role: "user", text }]);
+    setStatus(s => ({ ...s, inference_in_progress: true }));
+    setError(null);
+    try {
+      const r = await fetch(`${API}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text, timeout_s: timeoutS }),
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        setError(data.error || `Error ${r.status}`);
+        setStatus(s => ({ ...s, inference_in_progress: false }));
+        return;
+      }
+      setMessages(m => [...m, { role: "ariel", text: data.response }]);
+      setStatus(s => ({ ...s, inference_in_progress: false, history_turns: s.history_turns + 1 }));
+    } catch {
+      setError("Network error — orchestrator unreachable");
+      setStatus(s => ({ ...s, inference_in_progress: false }));
+    }
+  };
+
+  const onReset = async () => {
+    try { await fetch(`${API}/reset`, { method: "POST" }); } catch {}
+    setMessages([]);
+    setStatus(s => ({ ...s, history_turns: 0, last_response_ms: null, inference_in_progress: false }));
+    setResponseHistory([]);
+    setLastResponseAt(null);
+    setError(null);
+    prevLastMs.current = null;
+  };
+
+  const tweaksDesktop = { showWarnings: true, showSparkline: true,  showRemainingTurns: true };
+  const tweaksPhone   = { showWarnings: true, showSparkline: false, showRemainingTurns: true };
+
+  const [timeoutS, setTimeoutS] = React.useState(() => {
+    const saved = localStorage.getItem("ariel_timeout_s");
+    return saved ? parseInt(saved, 10) : 300;
+  });
+  const onTimeoutChange = (v) => { setTimeoutS(v); localStorage.setItem("ariel_timeout_s", String(v)); };
+
+  const statusProps = { status, lastResponseAt, responseHistory, onReset, timeoutS, onTimeoutChange };
+  const chatProps   = { messages, thinking: status.inference_in_progress, onSend: (t) => onSend(t, timeoutS), onReset, status, error };
+
+  if (layout === "desktop") {
+    return (
+      <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", height: "100%" }}>
+        <StatusPanel {...statusProps} tweaks={tweaksDesktop} />
+        <ChatPanel {...chatProps} />
+      </div>
+    );
+  }
+
+  if (layout === "phoneLandscape") {
+    return (
+      <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", height: "100%", fontSize: "12.5px" }}>
+        <StatusPanel {...statusProps} tweaks={tweaksPhone} />
+        <ChatPanel {...chatProps} />
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "grid", gridTemplateRows: "auto 1fr", height: "100%" }}>
+      <CompactStatusStrip status={status} lastResponseAt={lastResponseAt} />
+      <ChatPanel {...chatProps} />
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("app"));
+root.render(<App />);
+</script>
+
+</body>
+</html>

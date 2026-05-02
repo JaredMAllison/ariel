@@ -1,0 +1,28 @@
+# Ariel von Marlin — Phase 2 tool manifest
+# Controls which kb_core.py methods are exposed to Ariel as callable tools.
+# Set enabled: false to disable a tool without removing its definition.
+# Write tools (append_to_file, replace_lines) remain disabled until the
+# access model from spike-ariel-vault-access-model is finalized.
+
+tools:
+  search_vault:
+    enabled: true
+    description: "BM25 ranked search across all vault notes"
+  read_section:
+    enabled: true
+    description: "Read a named heading section from a vault note"
+  read_lines:
+    enabled: true
+    description: "Read a specific line range from a vault note"
+  outline:
+    enabled: true
+    description: "Get the heading structure of a vault note"
+  grep_vault:
+    enabled: true
+    description: "Regex search across all vault files"
+  append_to_file:
+    enabled: false
+    description: "Append content to a vault note (write — disabled pending access model)"
+  replace_lines:
+    enabled: false
+    description: "Replace lines in a vault note (write — disabled pending access model)"
