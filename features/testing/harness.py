@@ -56,6 +56,8 @@ def main():
                         help="Flag that inference is GPU-accelerated (default: False)")
     parser.add_argument("--host", default=None,
                         help="Override inference host name in results (default: hostname)")
+    parser.add_argument("--ollama-url", default=None,
+                        help="Override Ollama base URL (e.g. http://10.0.0.78:11434)")
     args = parser.parse_args()
 
     config_path = REPO_ROOT / "operator" / "config.yaml"
@@ -78,6 +80,11 @@ def main():
         _init_config(config_path)
     except SystemExit:
         sys.exit(f"[harness] Config not found at {config_path} — run python3 init.py first.")
+
+    if args.ollama_url:
+        base = args.ollama_url.rstrip("/")
+        orch_module.OLLAMA_URL     = f"{base}/api/chat"
+        orch_module.OLLAMA_PS_URL  = f"{base}/api/ps"
 
     if not prompts_path.exists():
         sys.exit(f"[harness] Battery not found: {prompts_path}")

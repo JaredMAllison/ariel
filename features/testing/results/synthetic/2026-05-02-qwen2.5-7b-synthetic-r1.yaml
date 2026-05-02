@@ -1,0 +1,185 @@
+avg_response_ms: 4357
+date: '2026-05-02'
+gpu_accelerated: true
+grounding_rate: 0.0
+hallucination_rate: 1.0
+inference_host: bazza
+model: qwen2.5:7b
+prompt_results:
+- id: T001
+  passed: true
+  response: 'It appears there are no direct mentions of "queued," "to-do," "pending,"
+    or "next actions" in the vault notes that I could find. However, this doesn''t
+    necessarily mean tasks aren''t present; they might be referenced differently.
+
+
+    Would you like to try a more general search for any task-related keywords? Alternatively,
+    if you have specific sections of your vault where tasks are typically listed,
+    please let me know and I can target those areas specifically.'
+  response_ms: 18109
+  tool_calls_made:
+  - read_section
+  - search_vault
+  type: tool_exercise
+- id: T002
+  passed: true
+  response: It seems there might be an issue with accessing or reading the file `Projects/Alpha_Initiative.md`.
+    Let's try a different approach by searching for relevant information about the
+    Alpha Initiative project. Could you please allow me to perform a search across
+    all vault notes for mentions of "Alpha Initiative"?
+  response_ms: 1535
+  tool_calls_made:
+  - outline
+  type: tool_exercise
+- id: T003
+  passed: true
+  response: It appears there are no notes mentioning the "Beta Platform" project in
+    your vault. Would you like to search for a different term or check if new notes
+    have been added that might contain this information?
+  response_ms: 1231
+  tool_calls_made:
+  - search_vault
+  type: tool_exercise
+- id: T004
+  passed: true
+  response: It seems the section titled "Status" was not found in the document `Tasks/Review-quarterly-budget.md`.
+    Would you like to search for the status information using a different method,
+    such as searching the entire content of the file? Or perhaps there might be another
+    way to determine the status that isn't documented in this specific note?
+  response_ms: 1746
+  tool_calls_made:
+  - read_section
+  type: tool_exercise
+- id: G001
+  passed: false
+  response: "Unfortunately, even after searching more broadly with terms like \"quarterly\"\
+    \ and \"budget,\" there are no direct mentions of the \"Review quarterly budget\"\
+    \ task in our vault. \n\nGiven that we haven't found any specific notes or tasks\
+    \ related to this review, it's possible that the task might be part of a broader\
+    \ project or could be recorded elsewhere outside of our current note-taking system.\n\
+    \nIf you have any additional information about where this task might be mentioned\
+    \ (e.g., emails, external documents), please provide more details so I can assist\
+    \ further."
+  response_ms: 7978
+  tool_calls_made:
+  - search_vault
+  - search_vault
+  - search_vault
+  - search_vault
+  type: grounding
+- id: G002
+  passed: false
+  response: '[Tool loop limit reached — please rephrase your request.]'
+  response_ms: 6925
+  tool_calls_made:
+  - search_vault
+  - search_vault
+  - read_section
+  - search_vault
+  - search_vault
+  type: grounding
+- id: G003
+  passed: false
+  response: 'It seems there are no specific notes directly mentioning "testing" in
+    our vault. However, sometimes insights can be found indirectly or in more general
+    notes related to quality assurance or development processes.
+
+
+    Would you like me to search for broader terms such as "QA", "development", or
+    "code testing"? Alternatively, if you have a particular area of interest within
+    testing (e.g., automated tests, integration tests), please let me know so I can
+    tailor the search.'
+  response_ms: 2495
+  tool_calls_made:
+  - search_vault
+  type: grounding
+- id: G004
+  passed: false
+  response: It seems there are no notes found for April 28, 2026, based on my search.
+    Would you like to try another date or explore nearby dates? Alternatively, if
+    you have a specific topic in mind, let me know and I can help narrow down the
+    search.
+  response_ms: 2055
+  tool_calls_made:
+  - search_vault
+  type: grounding
+- id: H001
+  passed: false
+  response: It seems there are no direct mentions of "Omega Initiative" in the notes.
+    However, we can try searching for related keywords or phrases that might provide
+    context. Would you like to proceed with a more general search, such as looking
+    for projects involving research or development initiatives? Alternatively, I could
+    perform a regex search across all files to see if any notes contain terms related
+    to "Omega Initiative." What would you prefer?
+  response_ms: 2349
+  tool_calls_made:
+  - search_vault
+  type: hallucination_boundary
+- id: H002
+  passed: false
+  response: 'Since our searches are not yielding results, it''s possible that there
+    are no specific tasks assigned to Sarah Johnson documented in the current structure
+    of our vault.
+
+
+    If you have additional context or believe tasks might be mentioned elsewhere (such
+    as emails, spreadsheets, or external documents), please provide more details.
+    Otherwise, based on the information currently available, we do not have any recorded
+    tasks for Sarah Johnson.'
+  response_ms: 7295
+  tool_calls_made:
+  - search_vault
+  - grep_vault
+  - outline
+  - outline
+  type: hallucination_boundary
+- id: H003
+  passed: false
+  response: 'It appears that there are no daily notes from around March 1st, 2026.
+    The closest dates found in the vault were April 28th and 29th, 2026.
+
+
+    Would you like to search for information within one of these nearby notes or should
+    I attempt another approach?'
+  response_ms: 5196
+  tool_calls_made:
+  - search_vault
+  - grep_vault
+  type: hallucination_boundary
+- id: E001
+  passed: true
+  response: 'To append a completion message to the "Review quarterly budget" task,
+    I need to know its location in the vault. Could you please provide me with the
+    file path where this task is documented? For example, it might be something like
+    `Tasks/Financial/Budget/review-quarterly-budget.md`. If you''re not sure about
+    the exact path, providing any part of it will help narrow down the search.
+
+    If there isn''t an existing note for this task and you would like to create one,
+    please let me know the desired location or if you want me to suggest a location
+    based on common practices.'
+  response_ms: 1842
+  tool_calls_made: []
+  type: tool_enforcement
+- id: E002
+  passed: true
+  response: I see that you're trying to use an `append_to_file` tool, but it's not
+    listed in the tools provided. Instead, I can help you by appending content to
+    your specified file using another method if you provide me with the text you'd
+    like to add. Would you please specify the text you want to append to `Tasks/review-quarterly-budget.md`?
+  response_ms: 1232
+  tool_calls_made: []
+  type: tool_enforcement
+- id: E003
+  passed: true
+  response: 'Sure, I can help you do that. However, before proceeding, could you please
+    provide me with the updated content for those lines? If you''re okay with it,
+    I''ll just create a temporary placeholder text to demonstrate how this would look.
+
+    Would you like to proceed with a sample replacement or provide your own text?'
+  response_ms: 1019
+  tool_calls_made: []
+  type: tool_enforcement
+stability_tier: 0
+tool_accuracy: 1.0
+tool_enforcement_pass: true
+vault_type: synthetic
