@@ -3,6 +3,8 @@
 
 import sys
 import time
+import shutil
+import tempfile
 import yaml
 import argparse
 from pathlib import Path
@@ -16,8 +18,9 @@ import orchestrator as orch_module
 from metrics import score_results, write_results, _prompt_passed
 
 
-def load_prompts(path: Path) -> list[dict]:
-    return yaml.safe_load(path.read_text(encoding="utf-8"))
+def load_prompts(path: Path, vault_type: str) -> list[dict]:
+    all_prompts = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return [p for p in all_prompts if p.get("vault", "any") in ("any", vault_type)]
 
 
 def run_battery(orch: Orchestrator, prompts: list[dict]) -> list[dict]:
@@ -58,6 +61,8 @@ def main():
                         help="Override inference host name in results (default: hostname)")
     parser.add_argument("--ollama-url", default=None,
                         help="Override Ollama base URL (e.g. http://10.0.0.78:11434)")
+    parser.add_argument("--snapshot", action="store_true", default=False,
+                        help="Copy vault to a temp dir before running; delete after. Safe for live vaults.")
     args = parser.parse_args()
 
     config_path = REPO_ROOT / "operator" / "config.yaml"
@@ -71,7 +76,7 @@ def main():
             from synthetic.seeder import seed_vault
             seed_vault(Path(__file__).parent / "synthetic" / "seed_spec.yaml", vault_path)
     else:
-        vault_path = Path(args.vault)
+        vault_path = Path(args.vault).expanduser()
         vault_type = "operator"
         if not vault_path.exists():
             sys.exit(f"[harness] Vault path does not exist: {vault_path}")
@@ -89,31 +94,44 @@ def main():
     if not prompts_path.exists():
         sys.exit(f"[harness] Battery not found: {prompts_path}")
 
-    prompts = load_prompts(prompts_path)
+    prompts = load_prompts(prompts_path, vault_type)
     models = args.models or [args.model or orch_module.OLLAMA_MODEL]
 
-    for model in models:
-        orch_module.OLLAMA_MODEL = model
-        orch = Orchestrator(str(vault_path))
-        print(f"\nRunning battery — model={model} vault={vault_type} prompts={len(prompts)}")
+    tmp_dir = None
+    try:
+        if args.snapshot and vault_type == "operator":
+            tmp_dir = Path(tempfile.mkdtemp(prefix="ariel-test-vault-"))
+            print(f"  Snapshotting vault → {tmp_dir} ...", flush=True)
+            shutil.copytree(vault_path, tmp_dir / "vault")
+            vault_path = tmp_dir / "vault"
+            print(f"  Snapshot ready. Original vault untouched.", flush=True)
 
-        try:
-            results = run_battery(orch, prompts)
-        except requests.exceptions.ConnectionError:
-            sys.exit(f"[harness] Ollama not reachable — is it running?")
+        for model in models:
+            orch_module.OLLAMA_MODEL = model
+            orch = Orchestrator(str(vault_path))
+            print(f"\nRunning battery — model={model} vault={vault_type} prompts={len(prompts)}")
 
-        scores = score_results(results)
+            try:
+                results = run_battery(orch, prompts)
+            except requests.exceptions.ConnectionError:
+                sys.exit(f"[harness] Ollama not reachable — is it running?")
 
-        out_dir = Path(__file__).parent / "results" / vault_type
-        out_path = write_results(scores, results, model, vault_type, out_dir,
-                                 inference_host=args.host, gpu_accelerated=args.gpu)
+            scores = score_results(results)
 
-        print(f"\n  tool_accuracy:       {scores['tool_accuracy']:.0%}")
-        print(f"  grounding_rate:      {scores['grounding_rate']:.0%}")
-        print(f"  hallucination_rate:  {scores['hallucination_rate']:.0%}")
-        print(f"  tool_enforcement:    {'PASS' if scores['tool_enforcement_pass'] else 'FAIL'}")
-        print(f"  avg_response_ms:     {scores['avg_response_ms']}")
-        print(f"\n  Results: {out_path}")
+            out_dir = Path(__file__).parent / "results" / vault_type
+            out_path = write_results(scores, results, model, vault_type, out_dir,
+                                     inference_host=args.host, gpu_accelerated=args.gpu)
+
+            print(f"\n  tool_accuracy:       {scores['tool_accuracy']:.0%}")
+            print(f"  grounding_rate:      {scores['grounding_rate']:.0%}")
+            print(f"  hallucination_rate:  {scores['hallucination_rate']:.0%}")
+            print(f"  tool_enforcement:    {'PASS' if scores['tool_enforcement_pass'] else 'FAIL'}")
+            print(f"  avg_response_ms:     {scores['avg_response_ms']}")
+            print(f"\n  Results: {out_path}")
+    finally:
+        if tmp_dir and tmp_dir.exists():
+            shutil.rmtree(tmp_dir)
+            print(f"  Snapshot deleted.", flush=True)
 
 
 if __name__ == "__main__":

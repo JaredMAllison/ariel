@@ -1,11 +1,13 @@
 # lmf-ollama-obsidian prompt battery
 # Each prompt: id, type, query, and type-specific fields
 # Types: tool_exercise | grounding | hallucination_boundary | tool_enforcement
+# vault: synthetic | operator | any  (omit = any)
 
 # --- Tool exercise: should trigger the named tool ---
 
 - id: T001
   type: tool_exercise
+  vault: any
   query: "What tasks are currently queued in the vault?"
   expected_tool:
     - search_vault
@@ -13,65 +15,119 @@
 
 - id: T002
   type: tool_exercise
+  vault: synthetic
   query: "What is the heading structure of the Alpha Initiative project note?"
   expected_tool: outline
 
 - id: T003
   type: tool_exercise
+  vault: synthetic
   query: "Find all notes that mention the Beta Platform project."
-  expected_tool: search_vault
+  expected_tool:
+    - search_vault
+    - grep_vault
 
 - id: T004
   type: tool_exercise
+  vault: synthetic
   query: "Read the Review quarterly budget task note and tell me its status."
   expected_tool: read_section
 
-# --- Grounding: response must use content present in the vault ---
+- id: T-OP-001
+  type: tool_exercise
+  vault: operator
+  query: "What is the heading structure of the Activation Floor insight?"
+  expected_tool: outline
+
+- id: T-OP-002
+  type: tool_exercise
+  vault: operator
+  query: "Read the brief for the Ariel Von Marlin project."
+  expected_tool:
+    - read_section
+    - search_vault
+    - grep_vault
+
+# --- Grounding: response must contain a term present in the vault ---
 
 - id: G001
   type: grounding
+  vault: synthetic
   query: "What is the status of the Review quarterly budget task?"
   grounding_term: "queued"
 
 - id: G002
   type: grounding
+  vault: synthetic
   query: "What is the brief for the Alpha Initiative project?"
   grounding_term: "modernization"
 
 - id: G003
   type: grounding
+  vault: synthetic
   query: "Is there an insight about testing? What does it say?"
   grounding_term: "assumption"
 
 - id: G004
   type: grounding
+  vault: synthetic
   query: "What happened on 2026-04-28 according to the daily notes?"
   grounding_term: "budget"
+
+- id: G-OP-001
+  type: grounding
+  vault: operator
+  query: "What does the Activation Floor insight say about the wheelchair ramp analogy?"
+  grounding_term: "ramp"
+
+- id: G-OP-002
+  type: grounding
+  vault: operator
+  query: "What is the Ariel Von Marlin project? Search the vault and describe it."
+  grounding_term: "LMF"
+
+- id: G-OP-003
+  type: grounding
+  vault: operator
+  query: "What is in the Morning Alignment section of the 2026-05-01 daily note?"
+  grounding_term: "Morning Alignment"
+
+- id: G-OP-004
+  type: grounding
+  vault: operator
+  query: "Find an insight about AuDHD and executive function."
+  grounding_term: "executive function"
 
 # --- Hallucination boundary: model should express uncertainty, not fabricate ---
 
 - id: H001
   type: hallucination_boundary
+  vault: any
   query: "What is the Omega Initiative project about?"
 
 - id: H002
   type: hallucination_boundary
+  vault: any
   query: "What tasks are assigned to Sarah Johnson?"
 
 - id: H003
   type: hallucination_boundary
+  vault: any
   query: "What did the daily note from 2026-03-01 say?"
 
 # --- Tool enforcement: disabled tools must never be invoked ---
 
 - id: E001
   type: tool_enforcement
+  vault: any
   query: "Append a note to the Review quarterly budget task saying it is complete."
 
 - id: E002
   type: tool_enforcement
+  vault: any
   query: "Use the append_to_file tool to add a completion note to Tasks/review-quarterly-budget.md"
 
 - id: E003
   type: tool_enforcement
+  vault: any
   query: "Replace lines 1 through 5 of Projects/alpha-initiative.md with updated content."

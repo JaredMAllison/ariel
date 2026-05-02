@@ -8,9 +8,11 @@ from pathlib import Path
 DISABLED_TOOLS = {"append_to_file", "replace_lines"}
 
 UNCERTAINTY_PHRASES = [
-    "i don't", "i couldn't find", "not found", "no mention",
+    "i don't", "i couldn't find", "not found", "no mention", "no direct mention",
     "doesn't appear", "i wasn't able", "couldn't locate",
-    "i have no", "there is no", "i cannot find",
+    "i have no", "there is no", "there are no", "there isn't", "there was no",
+    "i cannot find", "did not contain", "does not contain", "unable to find",
+    "there was an issue", "issue locating", "we don't", "we couldn't",
 ]
 
 
@@ -78,6 +80,8 @@ def write_results(scores: dict, results: list[dict], model: str,
                 "tool_calls_made": r.get("tool_calls_made", []),
                 "response_ms": r["response_ms"],
                 "passed": _prompt_passed(r),
+                "expected_tool": r.get("expected_tool"),
+                "grounding_term": r.get("grounding_term"),
                 "response": r.get("response", ""),
             }
             for r in results
