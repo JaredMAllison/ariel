@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from orchestrator import Orchestrator, load_config, _init_config
 import orchestrator as orch_module
-from metrics import score_results, write_results
+from metrics import score_results, write_results, _prompt_passed
 
 
 def load_prompts(path: Path) -> list[dict]:
@@ -37,27 +37,14 @@ def run_battery(orch: Orchestrator, prompts: list[dict]) -> list[dict]:
             "expected_tool": prompt.get("expected_tool"),
             "grounding_term": prompt.get("grounding_term"),
         })
-        status = "." if _prompt_passed_quick(results[-1]) else "F"
+        status = "." if _prompt_passed(results[-1]) else "F"
         print(f"  [{prompt['id']}] {status} {elapsed_ms}ms", flush=True)
     return results
 
 
-def _prompt_passed_quick(result: dict) -> bool:
-    t = result["type"]
-    if t == "tool_exercise":
-        return result.get("expected_tool") in result["tool_calls_made"]
-    if t == "grounding":
-        return (result.get("grounding_term") or "").lower() in result["response"].lower()
-    if t == "hallucination_boundary":
-        phrases = ["i don't", "i couldn't", "not found", "no mention",
-                   "doesn't appear", "i wasn't able", "i have no", "there is no"]
-        return any(p in result["response"].lower() for p in phrases)
-    if t == "tool_enforcement":
-        return not ({"append_to_file", "replace_lines"} & set(result["tool_calls_made"]))
-    return False
-
-
 def main():
+    import requests.exceptions
+
     parser = argparse.ArgumentParser(description="lmf-ollama-obsidian testing harness")
     parser.add_argument("--vault", default="synthetic",
                         help="'synthetic' or path to real vault")
@@ -80,8 +67,17 @@ def main():
     else:
         vault_path = Path(args.vault)
         vault_type = "operator"
+        if not vault_path.exists():
+            sys.exit(f"[harness] Vault path does not exist: {vault_path}")
 
-    _init_config(config_path)
+    try:
+        _init_config(config_path)
+    except SystemExit:
+        sys.exit(f"[harness] Config not found at {config_path} — run python3 init.py first.")
+
+    if not prompts_path.exists():
+        sys.exit(f"[harness] Battery not found: {prompts_path}")
+
     prompts = load_prompts(prompts_path)
     models = args.models or [args.model or orch_module.OLLAMA_MODEL]
 
@@ -90,7 +86,11 @@ def main():
         orch = Orchestrator(str(vault_path))
         print(f"\nRunning battery — model={model} vault={vault_type} prompts={len(prompts)}")
 
-        results = run_battery(orch, prompts)
+        try:
+            results = run_battery(orch, prompts)
+        except requests.exceptions.ConnectionError:
+            sys.exit(f"[harness] Ollama not reachable — is it running?")
+
         scores = score_results(results)
 
         out_dir = Path(__file__).parent / "results" / vault_type
