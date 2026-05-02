@@ -117,6 +117,7 @@ class Orchestrator:
         print(f"[orchestrator] Listening on {HOST}:{PORT}")
 
     def reset(self):
+        """Clear conversation history. last_tool_calls resets per-turn inside chat()."""
         self.history = []
 
     # --- Tool manifest ----------------------------------------------------------
