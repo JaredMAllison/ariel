@@ -111,12 +111,24 @@ def test_write_results_creates_yaml(tmp_path):
     results = [_make_result("T001", "tool_exercise", "ok", tool_calls_made=["search_vault"],
                              expected_tool="search_vault")]
     scores = score_results(results)
-    write_results(scores, results, model="qwen2.5:1.5b",
-                  vault_type="synthetic", output_dir=tmp_path)
-    files = list(tmp_path.glob("*.yaml"))
-    assert len(files) == 1
-    data = yaml.safe_load(files[0].read_text())
+    out = write_results(scores, results, model="qwen2.5:1.5b",
+                        vault_type="synthetic", output_dir=tmp_path)
+    data = yaml.safe_load(out.read_text())
     assert data["model"] == "qwen2.5:1.5b"
     assert data["vault_type"] == "synthetic"
     assert "tool_accuracy" in data
     assert data["prompt_results"][0]["response"] == "ok"
+    assert "-r1.yaml" in out.name
+
+
+def test_write_results_run_counter_increments(tmp_path):
+    results = [_make_result("T001", "tool_exercise", "ok", tool_calls_made=["search_vault"],
+                             expected_tool="search_vault")]
+    scores = score_results(results)
+    r1 = write_results(scores, results, model="qwen2.5:1.5b",
+                       vault_type="synthetic", output_dir=tmp_path)
+    r2 = write_results(scores, results, model="qwen2.5:1.5b",
+                       vault_type="synthetic", output_dir=tmp_path)
+    assert "-r1.yaml" in r1.name
+    assert "-r2.yaml" in r2.name
+    assert r1 != r2

@@ -54,8 +54,11 @@ def write_results(scores: dict, results: list[dict], model: str,
                   vault_type: str, output_dir: Path) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     today = date.today().isoformat()
-    filename = f"{today}-{model.replace(':', '-')}-{vault_type}.yaml"
-    out_path = output_dir / filename
+    slug = f"{today}-{model.replace(':', '-')}-{vault_type}"
+    existing = [f.stem for f in output_dir.glob(f"{slug}-r*.yaml")]
+    runs = [int(s.rsplit("-r", 1)[1]) for s in existing if s.rsplit("-r", 1)[-1].isdigit()]
+    run_n = max(runs, default=0) + 1
+    out_path = output_dir / f"{slug}-r{run_n}.yaml"
 
     doc = {
         "date": today,
