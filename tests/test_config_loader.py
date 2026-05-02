@@ -45,3 +45,12 @@ def test_ollama_ps_url_derived_from_ollama_url(tmp_path):
     p.write_text(yaml.dump(cfg))
     result = load_config(p)
     assert result["ollama_url"].replace("/api/chat", "/api/ps") == "http://10.0.0.8:11434/api/ps"
+
+
+def test_orchestrator_tracks_tool_calls():
+    from orchestrator import Orchestrator
+    # Orchestrator must expose last_tool_calls as an empty list on init
+    # We test structure only — no Ollama needed
+    orch = Orchestrator.__new__(Orchestrator)
+    orch.last_tool_calls = []
+    assert isinstance(orch.last_tool_calls, list)

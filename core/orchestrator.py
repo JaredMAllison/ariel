@@ -102,6 +102,7 @@ class Orchestrator:
         self.history: list[dict] = []
         self.inference_in_progress: bool = False
         self.last_response_ms: int | None = None
+        self.last_tool_calls: list[str] = []
 
         self.kb = KnowledgeBase(self.vault) if KB_AVAILABLE else None
         tools_config = Path(__file__).parent / "tools.config.yaml"
@@ -204,6 +205,7 @@ class Orchestrator:
 
     def _dispatch_tool(self, name: str, args: dict) -> str:
         try:
+            self.last_tool_calls.append(name)
             kb = self.kb
             if name == "search_vault":
                 return json.dumps(kb.search(args["query"], top_k=args.get("top_k", 5)))
@@ -230,6 +232,7 @@ class Orchestrator:
     # --- Chat -------------------------------------------------------------------
 
     def chat(self, user_message: str, timeout: int = OLLAMA_TIMEOUT) -> str:
+        self.last_tool_calls = []
         messages = [{"role": "system", "content": self.system_prompt}]
 
         # Inject skill if triggered
