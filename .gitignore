@@ -4,3 +4,4 @@ features/testing/synthetic/vault/
 __pycache__/
 *.pyc
 .pytest_cache/
+.worktrees/
