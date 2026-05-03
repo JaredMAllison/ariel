@@ -80,22 +80,27 @@ def _format_proposal(tool_name: str, args: dict) -> str:
     file_path = args.get("file_path", "unknown file")
     content   = args.get("content") or args.get("new_content", "")
     return f"Ariel wants to {action} `{file_path}`:\n\n{content}\n\nConfirm? (yes/no)"
-HOST              = "0.0.0.0"
-PORT              = 8742
+HOST                   = "0.0.0.0"
+PORT                   = 8742
+VERBOSE_WRITES         = False
+ALLOW_EXTERNAL_WRITES  = False
 SKILLS_DIR        = "System/Skills"
 UI_FILE           = Path(__file__).parent.parent / "features" / "ui" / "ariel.html"
 
 
 def _init_config(config_path: Path | None = None) -> None:
     """Read operator config and populate runtime globals. Called only inside run()."""
-    global OLLAMA_URL, OLLAMA_PS_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT, OLLAMA_NUM_CTX, PORT
+    global OLLAMA_URL, OLLAMA_PS_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT, OLLAMA_NUM_CTX, PORT, \
+           VERBOSE_WRITES, ALLOW_EXTERNAL_WRITES
     cfg = load_config(config_path)
-    OLLAMA_URL     = cfg["ollama_url"]
-    OLLAMA_PS_URL  = cfg["ollama_url"].replace("/api/chat", "/api/ps")
-    OLLAMA_MODEL   = cfg["model"]
-    OLLAMA_TIMEOUT = int(cfg["timeout_s"])
-    OLLAMA_NUM_CTX = int(cfg["num_ctx"])
-    PORT           = int(cfg["port"])
+    OLLAMA_URL            = cfg["ollama_url"]
+    OLLAMA_PS_URL         = cfg["ollama_url"].replace("/api/chat", "/api/ps")
+    OLLAMA_MODEL          = cfg["model"]
+    OLLAMA_TIMEOUT        = int(cfg["timeout_s"])
+    OLLAMA_NUM_CTX        = int(cfg["num_ctx"])
+    PORT                  = int(cfg["port"])
+    VERBOSE_WRITES        = bool(cfg.get("verbose_writes", False))
+    ALLOW_EXTERNAL_WRITES = bool(cfg.get("allow_external_writes", False))
 
 
 def load_skill(vault: Path, name: str) -> str | None:
@@ -118,7 +123,7 @@ def parse_skill_trigger(message: str) -> str | None:
 
 
 class Orchestrator:
-    def __init__(self, vault_path: str):
+    def __init__(self, vault_path: str, test_mode: bool = False):
         self.vault = Path(vault_path)
         self.system_prompt, self.prompt_stats = build_prompt(vault_path)
         self.history: list[dict] = []
@@ -126,9 +131,10 @@ class Orchestrator:
         self.last_response_ms: int | None = None
         self.last_tool_calls: list[str] = []
 
-        self.pending_write: dict | None = None
-        self.verbose_writes: bool = False
-        self.test_mode:      bool = False
+        self.pending_write:        dict | None = None
+        self.verbose_writes:        bool = VERBOSE_WRITES
+        self.allow_external_writes: bool = ALLOW_EXTERNAL_WRITES
+        self.test_mode:             bool = test_mode
 
         self.kb = KnowledgeBase(self.vault) if KB_AVAILABLE else None
         tools_config = Path(__file__).parent / "tools.config.yaml"
@@ -232,6 +238,12 @@ class Orchestrator:
 
     def _dispatch_tool(self, name: str, args: dict) -> str:
         try:
+            if name in _WRITE_TOOLS and not self.allow_external_writes:
+                file_path = args.get("file_path", "")
+                p = Path(file_path)
+                if p.is_absolute() or ".." in p.parts:
+                    return json.dumps({"error": "external writes disabled — use vault-relative paths only"})
+
             self.last_tool_calls.append(name)
             kb = self.kb
             if name == "search_vault":

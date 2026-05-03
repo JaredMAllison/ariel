@@ -152,3 +152,74 @@ def test_read_tools_dispatch_immediately(orch):
             orch.chat("what tasks do I have?")
     mock.assert_called_once_with("search_vault", {"query": "tasks"})
     assert orch.pending_write is None
+
+
+# --- verbose_writes / test_mode / path validation tests (Task 4) ---
+
+def test_verbose_writes_appends_summary(orch):
+    orch.verbose_writes = True
+    orch.pending_write = {
+        "name": "append_to_file",
+        "args": {"file_path": "Inbox.md", "content": "- test"},
+        "proposal": "...",
+    }
+    with patch.object(orch, "_dispatch_tool",
+                      return_value='{"file": "Inbox.md", "appended_at_line": 5}'):
+        reply = orch.chat("yes")
+    assert "✓ Written to `Inbox.md`" in reply
+
+
+def test_test_mode_implies_verbose(orch):
+    orch.test_mode = True
+    orch.pending_write = {
+        "name": "create_file",
+        "args": {"file_path": "Tasks/new.md", "content": "---\ntitle: New\n---"},
+        "proposal": "...",
+    }
+    with patch.object(orch, "_dispatch_tool",
+                      return_value='{"file": "Tasks/new.md", "created": true, "line_count": 3}'):
+        reply = orch.chat("yes")
+    assert "✓ Written to `Tasks/new.md`" in reply
+
+
+def test_no_verbose_no_summary(orch):
+    orch.verbose_writes = False
+    orch.test_mode      = False
+    orch.pending_write = {
+        "name": "append_to_file",
+        "args": {"file_path": "Inbox.md", "content": "- test"},
+        "proposal": "...",
+    }
+    with patch.object(orch, "_dispatch_tool",
+                      return_value='{"file": "Inbox.md", "appended_at_line": 5}'):
+        reply = orch.chat("yes")
+    assert "✓" not in reply
+    assert "Done" in reply
+
+
+def test_path_validation_rejects_traversal(orch):
+    orch.allow_external_writes = False
+    result = json.loads(orch._dispatch_tool(
+        "append_to_file", {"file_path": "../../etc/passwd", "content": "bad"}
+    ))
+    assert "error" in result
+    assert "external writes disabled" in result["error"]
+
+
+def test_path_validation_rejects_absolute(orch):
+    orch.allow_external_writes = False
+    result = json.loads(orch._dispatch_tool(
+        "create_file", {"file_path": "/tmp/escape.md", "content": "bad"}
+    ))
+    assert "error" in result
+
+
+def test_path_validation_allows_when_toggled(orch, tmp_path):
+    orch.allow_external_writes = True
+    external = tmp_path / "outside.md"
+    with patch.object(orch.kb, "append_to_file",
+                      return_value={"file": str(external), "appended_at_line": 1}):
+        result = json.loads(orch._dispatch_tool(
+            "append_to_file", {"file_path": str(external), "content": "hello"}
+        ))
+    assert "error" not in result
