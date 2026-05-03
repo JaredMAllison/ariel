@@ -46,6 +46,8 @@ def main(config_path: Path | None = None, reset: bool = False) -> None:
         "num_ctx": int(_prompt("Num context tokens", DEFAULTS["num_ctx"])),
         "ollama_url": DEFAULTS["ollama_url"],
         "timeout_s": DEFAULTS["timeout_s"],
+        "verbose_writes": False,
+        "allow_external_writes": False,
     }
 
     write_config(config_path, cfg)
