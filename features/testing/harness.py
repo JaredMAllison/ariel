@@ -23,26 +23,73 @@ def load_prompts(path: Path, vault_type: str) -> list[dict]:
     return [p for p in all_prompts if p.get("vault", "any") in ("any", vault_type)]
 
 
-def run_battery(orch: Orchestrator, prompts: list[dict]) -> list[dict]:
+def run_battery(orch: Orchestrator, prompts: list[dict], vault_path: Path) -> list[dict]:
     results = []
     for prompt in prompts:
         orch.reset()
         t0 = time.monotonic()
-        reply = orch.chat(prompt["query"])
-        elapsed_ms = int((time.monotonic() - t0) * 1000)
-        results.append({
-            "id": prompt["id"],
-            "type": prompt["type"],
-            "query": prompt["query"],
-            "response": reply,
-            "response_ms": elapsed_ms,
-            "tool_calls_made": list(orch.last_tool_calls),
-            "expected_tool": prompt.get("expected_tool"),
-            "grounding_term": prompt.get("grounding_term"),
-        })
-        status = "." if _prompt_passed(results[-1]) else "F"
-        print(f"  [{prompt['id']}] {status} {elapsed_ms}ms", flush=True)
+        if prompt["type"] == "write_exercise":
+            result = _run_write_exercise(orch, prompt, vault_path, t0)
+        else:
+            reply      = orch.chat(prompt["query"])
+            elapsed_ms = int((time.monotonic() - t0) * 1000)
+            result     = {
+                "id":              prompt["id"],
+                "type":            prompt["type"],
+                "query":           prompt["query"],
+                "response":        reply,
+                "response_ms":     elapsed_ms,
+                "tool_calls_made": list(orch.last_tool_calls),
+                "expected_tool":   prompt.get("expected_tool"),
+                "grounding_term":  prompt.get("grounding_term"),
+            }
+        results.append(result)
+        status = "." if _prompt_passed(result) else "F"
+        print(f"  [{prompt['id']}] {status} {result['response_ms']}ms", flush=True)
     return results
+
+
+def _run_write_exercise(orch: Orchestrator, prompt: dict,
+                         vault_path: Path, t0: float) -> dict:
+    expected_file   = prompt.get("expected_file", "")
+    expect_fragment = prompt.get("expected_content_fragment", "")
+    expect_no_write = prompt.get("expect_no_write", False)
+    confirm_with    = prompt.get("confirm_with", "yes")
+
+    target      = vault_path / expected_file if expected_file else None
+    file_before = target.read_text(encoding="utf-8") if (target and target.exists()) else None
+
+    # Turn 1 — should trigger proposal, not write
+    reply1    = orch.chat(prompt["query"])
+    gate_held = "Confirm? (yes/no)" in reply1 and "Ariel wants to" in reply1
+
+    # Turn 2 — confirm or reject
+    reply2     = orch.chat(confirm_with)
+    elapsed_ms = int((time.monotonic() - t0) * 1000)
+
+    if expect_no_write:
+        file_after      = target.read_text(encoding="utf-8") if (target and target.exists()) else None
+        write_confirmed = False
+        content_match   = (file_after == file_before)
+    else:
+        write_confirmed = "✓ Written to" in reply2
+        if target and target.exists():
+            file_after    = target.read_text(encoding="utf-8")
+            content_match = expect_fragment.lower() in file_after.lower() if expect_fragment else True
+        else:
+            content_match = False
+
+    return {
+        "id":              prompt["id"],
+        "type":            "write_exercise",
+        "query":           prompt["query"],
+        "response":        reply2,
+        "response_ms":     elapsed_ms,
+        "tool_calls_made": list(orch.last_tool_calls),
+        "gate_held":       gate_held,
+        "write_confirmed": write_confirmed,
+        "content_match":   content_match,
+    }
 
 
 def main():
@@ -108,11 +155,11 @@ def main():
 
         for model in models:
             orch_module.OLLAMA_MODEL = model
-            orch = Orchestrator(str(vault_path))
+            orch = Orchestrator(str(vault_path), test_mode=True)
             print(f"\nRunning battery — model={model} vault={vault_type} prompts={len(prompts)}")
 
             try:
-                results = run_battery(orch, prompts)
+                results = run_battery(orch, prompts, vault_path)
             except requests.exceptions.ConnectionError:
                 sys.exit(f"[harness] Ollama not reachable — is it running?")
 
@@ -127,6 +174,10 @@ def main():
             print(f"  hallucination_rate:  {scores['hallucination_rate']:.0%}")
             print(f"  tool_enforcement:    {'PASS' if scores['tool_enforcement_pass'] else 'FAIL'}")
             print(f"  avg_response_ms:     {scores['avg_response_ms']}")
+            if scores.get("write_gate_rate") is not None:
+                print(f"  write_gate_rate:     {scores['write_gate_rate']:.0%}")
+                print(f"  write_confirm_rate:  {scores['write_confirm_rate']:.0%}")
+                print(f"  content_match_rate:  {scores['content_match_rate']:.0%}")
             print(f"\n  Results: {out_path}")
     finally:
         if tmp_dir and tmp_dir.exists():

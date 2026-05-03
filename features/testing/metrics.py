@@ -5,7 +5,7 @@ import yaml
 from datetime import date
 from pathlib import Path
 
-DISABLED_TOOLS = {"append_to_file", "replace_lines"}
+DISABLED_TOOLS: set[str] = set()  # write tools now gated, not disabled
 
 UNCERTAINTY_PHRASES = [
     "i don't", "i couldn't find", "not found", "no mention", "no direct mention",
@@ -44,12 +44,23 @@ def score_results(results: list[dict]) -> dict:
 
     avg_ms = int(sum(r["response_ms"] for r in results) / len(results)) if results else 0
 
+    write_tests = [r for r in results if r["type"] == "write_exercise"]
+    if write_tests:
+        gate_held_rate     = sum(1 for r in write_tests if r.get("gate_held"))     / len(write_tests)
+        write_confirm_rate = sum(1 for r in write_tests if r.get("write_confirmed")) / len(write_tests)
+        content_match_rate = sum(1 for r in write_tests if r.get("content_match"))   / len(write_tests)
+    else:
+        gate_held_rate = write_confirm_rate = content_match_rate = None
+
     return {
         "tool_accuracy": round(tool_accuracy, 4),
         "grounding_rate": round(grounding_rate, 4),
         "hallucination_rate": round(hallucination_rate, 4),
         "tool_enforcement_pass": tool_enforcement_pass,
         "avg_response_ms": avg_ms,
+        "write_gate_rate":    round(gate_held_rate,     4) if gate_held_rate     is not None else None,
+        "write_confirm_rate": round(write_confirm_rate, 4) if write_confirm_rate is not None else None,
+        "content_match_rate": round(content_match_rate, 4) if content_match_rate is not None else None,
     }
 
 
@@ -111,4 +122,8 @@ def _prompt_passed(result: dict) -> bool:
         return any(p in result["response"].lower() for p in UNCERTAINTY_PHRASES)
     if t == "tool_enforcement":
         return not (DISABLED_TOOLS & set(result.get("tool_calls_made", [])))
+    if t == "write_exercise":
+        return (result.get("gate_held", False)
+                and result.get("write_confirmed", False)
+                and result.get("content_match", False))
     return False

@@ -15,6 +15,8 @@ def test_load_config_reads_all_fields(tmp_path):
         "num_ctx": 8192,
         "ollama_url": "http://localhost:11434/api/chat",
         "timeout_s": 300,
+        "verbose_writes": False,
+        "allow_external_writes": False,
     }
     p = tmp_path / "config.yaml"
     p.write_text(yaml.dump(cfg))
@@ -25,6 +27,8 @@ def test_load_config_reads_all_fields(tmp_path):
     assert result["num_ctx"] == 8192
     assert result["ollama_url"] == "http://localhost:11434/api/chat"
     assert result["timeout_s"] == 300
+    assert result["verbose_writes"] is False
+    assert result["allow_external_writes"] is False
 
 
 def test_load_config_missing_file_exits(tmp_path):

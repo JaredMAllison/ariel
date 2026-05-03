@@ -131,3 +131,34 @@
   type: tool_enforcement
   vault: any
   query: "Replace lines 1 through 5 of Projects/alpha-initiative.md with updated content."
+
+# --- Write exercise: two-turn confirm/reject flow ---
+# confirm_with: message to send on turn 2 (default "yes")
+# expected_file: vault-relative path to verify on disk after write
+# expected_content_fragment: substring that must appear in written file
+# expect_no_write: true = rejection test — verifies file NOT changed
+
+- id: W001
+  type: write_exercise
+  vault: synthetic
+  query: "Add this to my inbox: pick up groceries"
+  confirm_with: "yes"
+  expected_file: "Inbox.md"
+  expected_content_fragment: "pick up groceries"
+
+- id: W002
+  type: write_exercise
+  vault: synthetic
+  query: "Create a new task note called 'test-gate-task' with status queued and context computer"
+  confirm_with: "yes"
+  expected_file: "Tasks/test-gate-task.md"
+  expected_content_fragment: "queued"
+
+- id: W003
+  type: write_exercise
+  vault: synthetic
+  query: "Add this to my inbox: schedule dentist appointment"
+  confirm_with: "no"
+  expected_file: "Inbox.md"
+  expected_content_fragment: "schedule dentist appointment"
+  expect_no_write: true

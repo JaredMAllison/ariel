@@ -58,22 +58,49 @@ OLLAMA_TIMEOUT    = 300
 OLLAMA_NUM_CTX    = 8192
 MAX_HISTORY_TURNS = 10    # max user+assistant pairs kept; oldest dropped when exceeded
 MAX_TOOL_LOOPS    = 5     # max tool call rounds per turn before forcing a text response
-HOST              = "0.0.0.0"
-PORT              = 8742
+
+_WRITE_TOOLS = {"append_to_file", "replace_lines", "create_file", "insert_after_heading"}
+
+_WRITE_ACTION_LABELS = {
+    "append_to_file":       "append to",
+    "replace_lines":        "replace lines in",
+    "create_file":          "create",
+    "insert_after_heading": "insert into",
+}
+
+_CONFIRMATION_YES = {"yes", "y", "yeah", "yep", "sure", "ok", "go ahead", "confirm", "do it"}
+
+
+def is_confirmation(message: str) -> bool:
+    return message.strip().lower().rstrip(".,!?") in _CONFIRMATION_YES
+
+
+def _format_proposal(tool_name: str, args: dict) -> str:
+    action    = _WRITE_ACTION_LABELS.get(tool_name, "write to")
+    file_path = args.get("file_path", "unknown file")
+    content   = args.get("content") or args.get("new_content", "")
+    return f"Ariel wants to {action} `{file_path}`:\n\n{content}\n\nConfirm? (yes/no)"
+HOST                   = "0.0.0.0"
+PORT                   = 8742
+VERBOSE_WRITES         = False
+ALLOW_EXTERNAL_WRITES  = False
 SKILLS_DIR        = "System/Skills"
 UI_FILE           = Path(__file__).parent.parent / "features" / "ui" / "ariel.html"
 
 
 def _init_config(config_path: Path | None = None) -> None:
     """Read operator config and populate runtime globals. Called only inside run()."""
-    global OLLAMA_URL, OLLAMA_PS_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT, OLLAMA_NUM_CTX, PORT
+    global OLLAMA_URL, OLLAMA_PS_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT, OLLAMA_NUM_CTX, PORT, \
+           VERBOSE_WRITES, ALLOW_EXTERNAL_WRITES
     cfg = load_config(config_path)
-    OLLAMA_URL     = cfg["ollama_url"]
-    OLLAMA_PS_URL  = cfg["ollama_url"].replace("/api/chat", "/api/ps")
-    OLLAMA_MODEL   = cfg["model"]
-    OLLAMA_TIMEOUT = int(cfg["timeout_s"])
-    OLLAMA_NUM_CTX = int(cfg["num_ctx"])
-    PORT           = int(cfg["port"])
+    OLLAMA_URL            = cfg["ollama_url"]
+    OLLAMA_PS_URL         = cfg["ollama_url"].replace("/api/chat", "/api/ps")
+    OLLAMA_MODEL          = cfg["model"]
+    OLLAMA_TIMEOUT        = int(cfg["timeout_s"])
+    OLLAMA_NUM_CTX        = int(cfg["num_ctx"])
+    PORT                  = int(cfg["port"])
+    VERBOSE_WRITES        = bool(cfg.get("verbose_writes", False))
+    ALLOW_EXTERNAL_WRITES = bool(cfg.get("allow_external_writes", False))
 
 
 def load_skill(vault: Path, name: str) -> str | None:
@@ -96,13 +123,18 @@ def parse_skill_trigger(message: str) -> str | None:
 
 
 class Orchestrator:
-    def __init__(self, vault_path: str):
+    def __init__(self, vault_path: str, test_mode: bool = False):
         self.vault = Path(vault_path)
         self.system_prompt, self.prompt_stats = build_prompt(vault_path)
         self.history: list[dict] = []
         self.inference_in_progress: bool = False
         self.last_response_ms: int | None = None
         self.last_tool_calls: list[str] = []
+
+        self.pending_write:        dict | None = None
+        self.verbose_writes:        bool = VERBOSE_WRITES
+        self.allow_external_writes: bool = ALLOW_EXTERNAL_WRITES
+        self.test_mode:             bool = test_mode
 
         self.kb = KnowledgeBase(self.vault) if KB_AVAILABLE else None
         tools_config = Path(__file__).parent / "tools.config.yaml"
@@ -181,6 +213,28 @@ class Orchestrator:
             },
             "required": ["file_path", "start_line", "end_line", "new_content"],
         },
+        "list_files": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+        "insert_after_heading": {
+            "type": "object",
+            "properties": {
+                "file_path": {"type": "string", "description": "Vault-relative path"},
+                "heading":   {"type": "string", "description": "Heading to insert after (substring match OK)"},
+                "content":   {"type": "string", "description": "Content to insert"},
+            },
+            "required": ["file_path", "heading", "content"],
+        },
+        "create_file": {
+            "type": "object",
+            "properties": {
+                "file_path": {"type": "string", "description": "Vault-relative path for the new file"},
+                "content":   {"type": "string", "description": "Full file content including frontmatter"},
+            },
+            "required": ["file_path", "content"],
+        },
     }
 
     def _build_tools(self, config_path: Path) -> list[dict]:
@@ -206,6 +260,12 @@ class Orchestrator:
 
     def _dispatch_tool(self, name: str, args: dict) -> str:
         try:
+            if name in _WRITE_TOOLS and not self.allow_external_writes:
+                file_path = args.get("file_path", "")
+                p = Path(file_path)
+                if p.is_absolute() or ".." in p.parts:
+                    return json.dumps({"error": "external writes disabled — use vault-relative paths only"})
+
             self.last_tool_calls.append(name)
             kb = self.kb
             if name == "search_vault":
@@ -226,6 +286,13 @@ class Orchestrator:
                 return json.dumps(kb.replace_lines(
                     args["file_path"], args["start_line"], args["end_line"], args["new_content"]
                 ))
+            if name == "list_files":
+                return json.dumps(kb.list_files())
+            if name == "insert_after_heading":
+                r = kb.insert_after_heading(args["file_path"], args["heading"], args["content"])
+                return json.dumps(r if r else {"error": "Heading not found"})
+            if name == "create_file":
+                return json.dumps(kb.create_file(args["file_path"], args["content"]))
             return json.dumps({"error": f"Unknown tool: {name}"})
         except Exception as e:
             return json.dumps({"error": str(e)})
@@ -234,6 +301,21 @@ class Orchestrator:
 
     def chat(self, user_message: str, timeout: int = OLLAMA_TIMEOUT) -> str:
         self.last_tool_calls = []
+
+        if self.pending_write:
+            if is_confirmation(user_message):
+                result    = self._dispatch_tool(self.pending_write["name"], self.pending_write["args"])
+                file_path = self.pending_write["args"].get("file_path", "unknown")
+                self.pending_write = None
+                reply = "Done."
+                if self.verbose_writes or self.test_mode:
+                    reply += f"\n\n✓ Written to `{file_path}`"
+                self.history.append({"role": "user",      "content": user_message})
+                self.history.append({"role": "assistant", "content": reply})
+                return reply
+            else:
+                self.pending_write = None  # fall through — treat as new user turn
+
         messages = [{"role": "system", "content": self.system_prompt}]
 
         # Inject skill if triggered
@@ -276,18 +358,29 @@ class Orchestrator:
                     reply = msg.get("content", "")
                     break
 
-                # Dispatch tool calls and append results before next loop iteration
                 messages.append({
                     "role": "assistant",
                     "content": msg.get("content", ""),
                     "tool_calls": tool_calls,
                 })
+                gated = False
                 for tc in tool_calls:
                     fn_name = tc["function"]["name"]
                     fn_args = tc["function"]["arguments"]
                     if isinstance(fn_args, str):
                         fn_args = json.loads(fn_args)
+                    if fn_name in _WRITE_TOOLS:
+                        self.pending_write = {
+                            "name":     fn_name,
+                            "args":     fn_args,
+                            "proposal": _format_proposal(fn_name, fn_args),
+                        }
+                        reply = self.pending_write["proposal"]
+                        gated = True
+                        break
                     messages.append({"role": "tool", "content": self._dispatch_tool(fn_name, fn_args)})
+                if gated:
+                    break
             else:
                 reply = "[Tool loop limit reached — please rephrase your request.]"
         finally:
