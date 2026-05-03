@@ -213,6 +213,28 @@ class Orchestrator:
             },
             "required": ["file_path", "start_line", "end_line", "new_content"],
         },
+        "list_files": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+        "insert_after_heading": {
+            "type": "object",
+            "properties": {
+                "file_path": {"type": "string", "description": "Vault-relative path"},
+                "heading":   {"type": "string", "description": "Heading to insert after (substring match OK)"},
+                "content":   {"type": "string", "description": "Content to insert"},
+            },
+            "required": ["file_path", "heading", "content"],
+        },
+        "create_file": {
+            "type": "object",
+            "properties": {
+                "file_path": {"type": "string", "description": "Vault-relative path for the new file"},
+                "content":   {"type": "string", "description": "Full file content including frontmatter"},
+            },
+            "required": ["file_path", "content"],
+        },
     }
 
     def _build_tools(self, config_path: Path) -> list[dict]:
@@ -264,6 +286,13 @@ class Orchestrator:
                 return json.dumps(kb.replace_lines(
                     args["file_path"], args["start_line"], args["end_line"], args["new_content"]
                 ))
+            if name == "list_files":
+                return json.dumps(kb.list_files())
+            if name == "insert_after_heading":
+                r = kb.insert_after_heading(args["file_path"], args["heading"], args["content"])
+                return json.dumps(r if r else {"error": "Heading not found"})
+            if name == "create_file":
+                return json.dumps(kb.create_file(args["file_path"], args["content"]))
             return json.dumps({"error": f"Unknown tool: {name}"})
         except Exception as e:
             return json.dumps({"error": str(e)})

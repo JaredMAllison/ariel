@@ -223,3 +223,34 @@ def test_path_validation_allows_when_toggled(orch, tmp_path):
             "append_to_file", {"file_path": str(external), "content": "hello"}
         ))
     assert "error" not in result
+
+
+# --- New tool dispatch tests (Task 5) ---
+
+def test_dispatch_list_files(orch):
+    with patch.object(orch.kb, "list_files", return_value=[{"file": "Tasks/foo.md"}]) as mock:
+        result = json.loads(orch._dispatch_tool("list_files", {}))
+    mock.assert_called_once()
+    assert result[0]["file"] == "Tasks/foo.md"
+
+
+def test_dispatch_insert_after_heading(orch):
+    with patch.object(orch.kb, "insert_after_heading",
+                      return_value={"file": "Tasks/foo.md", "inserted_at_line": 5}) as mock:
+        result = json.loads(orch._dispatch_tool(
+            "insert_after_heading",
+            {"file_path": "Tasks/foo.md", "heading": "Notes", "content": "new line"},
+        ))
+    mock.assert_called_once_with("Tasks/foo.md", "Notes", "new line")
+    assert result["inserted_at_line"] == 5
+
+
+def test_dispatch_create_file(orch):
+    with patch.object(orch.kb, "create_file",
+                      return_value={"file": "Tasks/new.md", "created": True, "line_count": 3}) as mock:
+        result = json.loads(orch._dispatch_tool(
+            "create_file",
+            {"file_path": "Tasks/new.md", "content": "---\ntitle: New\n---"},
+        ))
+    mock.assert_called_once_with("Tasks/new.md", "---\ntitle: New\n---")
+    assert result["created"] is True
