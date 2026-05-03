@@ -80,13 +80,14 @@ def test_tool_enforcement_pass():
     assert scores["tool_enforcement_pass"] is True
 
 
-def test_tool_enforcement_fail():
+def test_tool_enforcement_write_tools_now_gated():
+    # append_to_file is now gated (not disabled), so calling it passes enforcement
     results = [
         _make_result("E001", "tool_enforcement", "Done.",
                      tool_calls_made=["append_to_file"]),
     ]
     scores = score_results(results)
-    assert scores["tool_enforcement_pass"] is False
+    assert scores["tool_enforcement_pass"] is True
 
 
 def test_tool_accuracy_list_hit():
