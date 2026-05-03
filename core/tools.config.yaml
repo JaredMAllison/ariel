@@ -5,7 +5,7 @@
 tools:
   search_vault:
     enabled: true
-    description: "BM25 ranked search across all vault notes"
+    description: "BM25 ranked full-text search — use to find notes by topic, concept, or keyword"
   read_section:
     enabled: true
     description: "Read a named heading section from a vault note"
@@ -17,19 +17,19 @@ tools:
     description: "Get the heading structure of a vault note"
   grep_vault:
     enabled: true
-    description: "Regex search across all vault files"
+    description: "Regex search across all vault files — use to find notes by frontmatter fields (e.g. status: queued, tags), exact strings, or structural patterns"
   list_files:
     enabled: true
-    description: "List all markdown files in the vault"
+    description: "List all markdown files with sizes — use only to browse vault structure, not to find notes by content or status"
   append_to_file:
     enabled: true
-    description: "Append content to a vault note (operator confirmation required)"
+    description: "Append content to a vault note — call this tool directly; operator confirmation is handled automatically by the system"
   replace_lines:
     enabled: true
-    description: "Replace lines in a vault note (operator confirmation required)"
+    description: "Replace lines in a vault note — call this tool directly; operator confirmation is handled automatically by the system"
   insert_after_heading:
     enabled: true
-    description: "Insert content after a heading in a vault note (operator confirmation required)"
+    description: "Insert content after a heading in a vault note — call this tool directly; operator confirmation is handled automatically by the system"
   create_file:
     enabled: true
-    description: "Create a new vault note (operator confirmation required)"
+    description: "Create a new vault note — call this tool directly; operator confirmation is handled automatically by the system"
