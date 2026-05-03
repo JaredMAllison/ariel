@@ -58,6 +58,28 @@ OLLAMA_TIMEOUT    = 300
 OLLAMA_NUM_CTX    = 8192
 MAX_HISTORY_TURNS = 10    # max user+assistant pairs kept; oldest dropped when exceeded
 MAX_TOOL_LOOPS    = 5     # max tool call rounds per turn before forcing a text response
+
+_WRITE_TOOLS = {"append_to_file", "replace_lines", "create_file", "insert_after_heading"}
+
+_WRITE_ACTION_LABELS = {
+    "append_to_file":       "append to",
+    "replace_lines":        "replace lines in",
+    "create_file":          "create",
+    "insert_after_heading": "insert into",
+}
+
+_CONFIRMATION_YES = {"yes", "y", "yeah", "yep", "sure", "ok", "go ahead", "confirm", "do it"}
+
+
+def is_confirmation(message: str) -> bool:
+    return message.strip().lower().rstrip(".,!?") in _CONFIRMATION_YES
+
+
+def _format_proposal(tool_name: str, args: dict) -> str:
+    action    = _WRITE_ACTION_LABELS.get(tool_name, "write to")
+    file_path = args.get("file_path", "unknown file")
+    content   = args.get("content") or args.get("new_content", "")
+    return f"Ariel wants to {action} `{file_path}`:\n\n{content}\n\nConfirm? (yes/no)"
 HOST              = "0.0.0.0"
 PORT              = 8742
 SKILLS_DIR        = "System/Skills"
