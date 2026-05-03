@@ -126,6 +126,10 @@ class Orchestrator:
         self.last_response_ms: int | None = None
         self.last_tool_calls: list[str] = []
 
+        self.pending_write: dict | None = None
+        self.verbose_writes: bool = False
+        self.test_mode:      bool = False
+
         self.kb = KnowledgeBase(self.vault) if KB_AVAILABLE else None
         tools_config = Path(__file__).parent / "tools.config.yaml"
         self.tools = self._build_tools(tools_config) if self.kb else []
@@ -256,6 +260,21 @@ class Orchestrator:
 
     def chat(self, user_message: str, timeout: int = OLLAMA_TIMEOUT) -> str:
         self.last_tool_calls = []
+
+        if self.pending_write:
+            if is_confirmation(user_message):
+                result    = self._dispatch_tool(self.pending_write["name"], self.pending_write["args"])
+                file_path = self.pending_write["args"].get("file_path", "unknown")
+                self.pending_write = None
+                reply = "Done."
+                if self.verbose_writes or self.test_mode:
+                    reply += f"\n\n✓ Written to `{file_path}`"
+                self.history.append({"role": "user",      "content": user_message})
+                self.history.append({"role": "assistant", "content": reply})
+                return reply
+            else:
+                self.pending_write = None  # fall through — treat as new user turn
+
         messages = [{"role": "system", "content": self.system_prompt}]
 
         # Inject skill if triggered
@@ -298,18 +317,29 @@ class Orchestrator:
                     reply = msg.get("content", "")
                     break
 
-                # Dispatch tool calls and append results before next loop iteration
                 messages.append({
                     "role": "assistant",
                     "content": msg.get("content", ""),
                     "tool_calls": tool_calls,
                 })
+                gated = False
                 for tc in tool_calls:
                     fn_name = tc["function"]["name"]
                     fn_args = tc["function"]["arguments"]
                     if isinstance(fn_args, str):
                         fn_args = json.loads(fn_args)
+                    if fn_name in _WRITE_TOOLS:
+                        self.pending_write = {
+                            "name":     fn_name,
+                            "args":     fn_args,
+                            "proposal": _format_proposal(fn_name, fn_args),
+                        }
+                        reply = self.pending_write["proposal"]
+                        gated = True
+                        break
                     messages.append({"role": "tool", "content": self._dispatch_tool(fn_name, fn_args)})
+                if gated:
+                    break
             else:
                 reply = "[Tool loop limit reached — please rephrase your request.]"
         finally:
