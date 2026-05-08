@@ -253,8 +253,10 @@ class Orchestrator:
         self.tools = self._build_tools(tools_config) if self.kb else []
         self._clear_init_state()
 
-        print(f"[orchestrator] Initiation complete — handed off to Ariel")
-        return "Setup complete. Let me introduce you to your assistant."
+        cfg = load_config()
+        ai_name = cfg.get("ai_name", "your assistant")
+        print(f"[orchestrator] Initiation complete — handed off to {ai_name}")
+        return f"Setup complete. Let me introduce you to {ai_name}."
 
     # --- Tool manifest ----------------------------------------------------------
 
