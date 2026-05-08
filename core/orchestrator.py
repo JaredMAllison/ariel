@@ -17,6 +17,7 @@ Endpoints:
 
 import json
 import re
+import shutil
 import sys
 import time
 from datetime import datetime
@@ -238,10 +239,14 @@ class Orchestrator:
             inbox.write_text("", encoding="utf-8")
 
     def _complete_initiation(self) -> str:
-        profile = self.init_handoff["profile_draft"]
+        proposed_path = self.vault / ".proposed" / "LOCAL_MIND_FOUNDATION.md"
+        if proposed_path.exists():
+            foundation = proposed_path.read_text(encoding="utf-8")
+        else:
+            foundation = self._build_foundation_md(self.init_handoff["profile_draft"])
 
-        foundation = self._build_foundation_md(profile)
         (self.vault / "LOCAL_MIND_FOUNDATION.md").write_text(foundation, encoding="utf-8")
+        shutil.rmtree(self.vault / ".proposed", ignore_errors=True)
 
         self._seed_vault_directories()
 
@@ -387,6 +392,7 @@ class Orchestrator:
             if is_confirmation(user_message):
                 return self._complete_initiation()
             else:
+                shutil.rmtree(self.vault / ".proposed", ignore_errors=True)
                 self.init_handoff = None
 
         messages = [{"role": "system", "content": self.system_prompt}]
@@ -448,10 +454,18 @@ class Orchestrator:
             self.inference_in_progress = False
             self.last_response_ms = int((time.monotonic() - t0) * 1000)
 
-        # Init mode: detect completion signal
+        # Init mode: detect completion signal → write proposed file
         if self.is_init_mode and "[INIT_COMPLETE]" in reply:
             profile = self._extract_profile(reply)
-            self.init_handoff = {"reply": reply, "profile_draft": profile}
+            proposed_dir = self.vault / ".proposed"
+            proposed_dir.mkdir(parents=True, exist_ok=True)
+            proposed_path = proposed_dir / "LOCAL_MIND_FOUNDATION.md"
+            proposed_path.write_text(self._build_foundation_md(profile), encoding="utf-8")
+            self.init_handoff = {
+                "reply": reply,
+                "profile_draft": profile,
+                "proposal_file": ".proposed/LOCAL_MIND_FOUNDATION.md",
+            }
             self.init_state["phase"] = "handoff"
             self.init_state["profile_draft"] = profile
             self._save_init_state()
@@ -565,7 +579,17 @@ class Handler(BaseHTTPRequestHandler):
             timeout = int(body.get("timeout_s", OLLAMA_TIMEOUT))
             try:
                 reply = self.orchestrator.chat(message, timeout=timeout)
-                self._respond(200, {"response": reply})
+                resp = {"response": reply}
+                if self.orchestrator.init_handoff:
+                    pf = self.orchestrator.init_handoff.get("proposal_file")
+                    if pf:
+                        proposed_path = self.orchestrator.vault / pf
+                        if proposed_path.exists():
+                            resp["proposal"] = {
+                                "path": pf,
+                                "content": proposed_path.read_text(encoding="utf-8"),
+                            }
+                self._respond(200, resp)
             except requests.exceptions.Timeout:
                 self._respond(504, {"error": f"model did not respond within {timeout}s"})
             except Exception as e:
