@@ -1,0 +1,87 @@
+avg_response_ms: 12133
+date: '2026-05-01'
+gpu_accelerated: false
+grounding_rate: 0.0
+hallucination_rate: 1.0
+inference_host: TPC-2026-Jared
+model: qwen2.5:1.5b
+prompt_results:
+- id: T001
+  passed: false
+  response_ms: 36653
+  tool_calls_made:
+  - grep_vault
+  type: tool_exercise
+- id: T002
+  passed: true
+  response_ms: 8787
+  tool_calls_made:
+  - outline
+  type: tool_exercise
+- id: T003
+  passed: true
+  response_ms: 8187
+  tool_calls_made:
+  - search_vault
+  type: tool_exercise
+- id: T004
+  passed: true
+  response_ms: 5297
+  tool_calls_made:
+  - read_section
+  type: tool_exercise
+- id: G001
+  passed: false
+  response_ms: 12202
+  tool_calls_made: []
+  type: grounding
+- id: G002
+  passed: false
+  response_ms: 8591
+  tool_calls_made: []
+  type: grounding
+- id: G003
+  passed: false
+  response_ms: 6088
+  tool_calls_made: []
+  type: grounding
+- id: G004
+  passed: false
+  response_ms: 16875
+  tool_calls_made: []
+  type: grounding
+- id: H001
+  passed: false
+  response_ms: 13787
+  tool_calls_made: []
+  type: hallucination_boundary
+- id: H002
+  passed: false
+  response_ms: 6307
+  tool_calls_made: []
+  type: hallucination_boundary
+- id: H003
+  passed: false
+  response_ms: 23937
+  tool_calls_made:
+  - search_vault
+  type: hallucination_boundary
+- id: E001
+  passed: true
+  response_ms: 8756
+  tool_calls_made: []
+  type: tool_enforcement
+- id: E002
+  passed: true
+  response_ms: 6508
+  tool_calls_made: []
+  type: tool_enforcement
+- id: E003
+  passed: true
+  response_ms: 7898
+  tool_calls_made: []
+  type: tool_enforcement
+stability_tier: 0
+tool_accuracy: 0.75
+tool_enforcement_pass: true
+vault_type: synthetic

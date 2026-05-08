@@ -17,8 +17,10 @@ Endpoints:
 
 import json
 import re
+import shutil
 import sys
 import time
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
@@ -40,6 +42,29 @@ except ImportError as _e:
     KB_AVAILABLE = False
 
 from build_prompt import build_prompt
+
+# Write tool names — used for tool gating in init mode
+_WRITE_TOOLS = {"append_to_file", "replace_lines", "create_file", "insert_after_heading"}
+
+_CONFIRMATION_YES = {"yes", "y", "yeah", "yep", "sure", "ok", "go ahead", "confirm", "do it"}
+
+INIT_STATE_PATH = "operator/.init_state.json"
+DEPLOY_CONFIG_PATH = "operator/deploy.yaml"
+
+
+def is_confirmation(message: str) -> bool:
+    return message.strip().lower().rstrip(".,!?") in _CONFIRMATION_YES
+
+
+def load_deploy_config(vault: Path) -> dict:
+    """Read deploy.yaml from vault operator/ dir, with all-defaults fallback."""
+    default = {"instance_name": "LMF", "trust_profile": "personal", "onboarding_mode": "guided"}
+    path = vault / DEPLOY_CONFIG_PATH
+    if path.exists():
+        cfg = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        return {**default, **cfg}
+    return default
+
 
 def load_config(config_path: Path | None = None) -> dict:
     """Load operator config from YAML. Calls sys.exit if the file is missing."""
@@ -96,27 +121,154 @@ def parse_skill_trigger(message: str) -> str | None:
 
 
 class Orchestrator:
-    def __init__(self, vault_path: str):
+    def __init__(self, vault_path: str, test_mode: bool = False):
         self.vault = Path(vault_path)
-        self.system_prompt, self.prompt_stats = build_prompt(vault_path)
+        self.is_init_mode = self._is_first_run()
         self.history: list[dict] = []
         self.inference_in_progress: bool = False
         self.last_response_ms: int | None = None
+        self.last_tool_calls: list[str] = []
+        self.test_mode = test_mode
 
-        self.kb = KnowledgeBase(self.vault) if KB_AVAILABLE else None
-        tools_config = Path(__file__).parent / "tools.config.yaml"
-        self.tools = self._build_tools(tools_config) if self.kb else []
+        if self.is_init_mode:
+            self._enter_init_mode()
+        else:
+            self.system_prompt, self.prompt_stats = build_prompt(vault_path)
+            self.kb = KnowledgeBase(self.vault) if KB_AVAILABLE else None
+            tools_config = Path(__file__).parent / "tools.config.yaml"
+            self.tools = self._build_tools(tools_config) if self.kb else []
 
         print(f"[orchestrator] Vault: {self.vault}")
         print(f"[orchestrator] System prompt: {len(self.system_prompt)} chars")
-        if self.tools:
+        if self.is_init_mode:
+            print(f"[orchestrator] Mode: init (first run)")
+        elif self.tools:
             print(f"[orchestrator] Tools: {[t['function']['name'] for t in self.tools]}")
         else:
             print("[orchestrator] Tools: none (Phase 1 mode)")
         print(f"[orchestrator] Listening on {HOST}:{PORT}")
 
+    def _is_first_run(self) -> bool:
+        return not (self.vault / "LOCAL_MIND_FOUNDATION.md").exists()
+
+    def _enter_init_mode(self):
+        deploy_cfg = load_deploy_config(self.vault)
+        init_prompt_path = Path(__file__).parent / "prompts" / "init.md"
+        template = init_prompt_path.read_text(encoding="utf-8")
+
+        init_state = self._load_init_state()
+        if init_state.get("phase") != "interview":
+            resume_context = (
+                "The operator partially completed setup. "
+                "Do not repeat questions already answered. "
+                "Resume from where they left off."
+            )
+        else:
+            resume_context = ""
+
+        self.system_prompt = template.format(
+            instance_name=deploy_cfg["instance_name"],
+            trust_profile=deploy_cfg["trust_profile"],
+            onboarding_mode=deploy_cfg["onboarding_mode"],
+            resume_context=resume_context,
+        )
+        self.prompt_stats = {"memory_files_loaded": 0, "skills_in_index": 0}
+        self.kb = None
+        self.tools = []
+        self.init_state = init_state
+        self.init_handoff = None
+
     def reset(self):
         self.history = []
+        if self.is_init_mode:
+            self._clear_init_state()
+
+    # --- Init state management --------------------------------------------------
+
+    def _load_init_state(self) -> dict:
+        path = self.vault / INIT_STATE_PATH
+        if path.exists():
+            return json.loads(path.read_text(encoding="utf-8"))
+        return {"phase": "interview", "answered_questions": [], "profile_draft": {}}
+
+    def _save_init_state(self):
+        path = self.vault / INIT_STATE_PATH
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # Convert non-serializable types (e.g. date) to strings
+        def _convert(o):
+            if hasattr(o, "isoformat"):
+                return o.isoformat()
+            raise TypeError(f"Object of type {o.__class__.__name__} is not JSON serializable")
+        path.write_text(json.dumps(self.init_state, indent=2, default=_convert), encoding="utf-8")
+
+    def _clear_init_state(self):
+        path = self.vault / INIT_STATE_PATH
+        if path.exists():
+            path.unlink()
+
+    # --- Init → Ariel handoff ---------------------------------------------------
+
+    def _extract_profile(self, reply: str) -> dict:
+        """Extract YAML frontmatter from between --- markers after [INIT_COMPLETE]."""
+        after_signal = reply.split("[INIT_COMPLETE]", 1)[-1]
+        match = re.search(r'^---\s*\n(.*?)\n---', after_signal, re.DOTALL | re.MULTILINE)
+        if match:
+            try:
+                return yaml.safe_load(match.group(1)) or {}
+            except yaml.YAMLError:
+                return {}
+        return {}
+
+    def _build_foundation_md(self, profile: dict) -> str:
+        fields = {
+            "title": "LOCAL_MIND_FOUNDATION",
+            "type": "profile",
+            "instance_name": profile.get("instance_name", "LMF"),
+            "trust_profile": profile.get("trust_profile", "personal"),
+            "init_date": datetime.now().strftime("%Y-%m-%d"),
+        }
+        for key in ("operator_name", "primary_need", "attention_profile", "work_separate", "household_size"):
+            if key in profile and profile[key]:
+                fields[key] = profile[key]
+
+        lines = ["---"]
+        for k, v in fields.items():
+            lines.append(f"{k}: {v}")
+        lines.append("---")
+        lines.append("")
+        return "\n".join(lines)
+
+    def _seed_vault_directories(self):
+        for d in ["Tasks", "Projects", "Daily"]:
+            (self.vault / d).mkdir(parents=True, exist_ok=True)
+        inbox = self.vault / "Inbox.md"
+        if not inbox.exists():
+            inbox.write_text("", encoding="utf-8")
+
+    def _complete_initiation(self) -> str:
+        proposed_path = self.vault / ".proposed" / "LOCAL_MIND_FOUNDATION.md"
+        if proposed_path.exists():
+            foundation = proposed_path.read_text(encoding="utf-8")
+        else:
+            foundation = self._build_foundation_md(self.init_handoff["profile_draft"])
+
+        (self.vault / "LOCAL_MIND_FOUNDATION.md").write_text(foundation, encoding="utf-8")
+        shutil.rmtree(self.vault / ".proposed", ignore_errors=True)
+
+        self._seed_vault_directories()
+
+        self.system_prompt, self.prompt_stats = build_prompt(str(self.vault))
+        self.is_init_mode = False
+        self.init_handoff = None
+        self.kb = KnowledgeBase(self.vault) if KB_AVAILABLE else None
+        tools_config = Path(__file__).parent / "tools.config.yaml"
+        self.tools = self._build_tools(tools_config) if self.kb else []
+        self._clear_init_state()
+
+        cfg = load_config()
+        ai_name = cfg.get("ai_name", "your assistant")
+        print(f"[orchestrator] Initiation complete — handed off to {ai_name}")
+        return f"Setup complete. Let me introduce you to {ai_name}."
 
     # --- Tool manifest ----------------------------------------------------------
 
@@ -204,6 +356,19 @@ class Orchestrator:
 
     def _dispatch_tool(self, name: str, args: dict) -> str:
         try:
+            # Init mode write gate — only append_to_file to Inbox.md
+            if self.is_init_mode:
+                if name == "append_to_file" and args.get("file_path") == "Inbox.md":
+                    inbox = self.vault / "Inbox.md"
+                    inbox.parent.mkdir(parents=True, exist_ok=True)
+                    with open(inbox, "a", encoding="utf-8") as f:
+                        f.write(args["content"].strip() + "\n")
+                    return json.dumps({"status": "appended to Inbox.md"})
+                if name in _WRITE_TOOLS:
+                    return json.dumps({"error": "In init mode, write tools are limited to Inbox.md"})
+                return json.dumps({"error": "Vault tools are unavailable during init mode"})
+
+            self.last_tool_calls.append(name)
             kb = self.kb
             if name == "search_vault":
                 return json.dumps(kb.search(args["query"], top_k=args.get("top_k", 5)))
@@ -230,6 +395,15 @@ class Orchestrator:
     # --- Chat -------------------------------------------------------------------
 
     def chat(self, user_message: str, timeout: int = OLLAMA_TIMEOUT) -> str:
+        self.last_tool_calls = []
+        # Init mode: check for handoff confirmation
+        if self.is_init_mode and self.init_handoff:
+            if is_confirmation(user_message):
+                return self._complete_initiation()
+            else:
+                shutil.rmtree(self.vault / ".proposed", ignore_errors=True)
+                self.init_handoff = None
+
         messages = [{"role": "system", "content": self.system_prompt}]
 
         # Inject skill if triggered
@@ -272,7 +446,6 @@ class Orchestrator:
                     reply = msg.get("content", "")
                     break
 
-                # Dispatch tool calls and append results before next loop iteration
                 messages.append({
                     "role": "assistant",
                     "content": msg.get("content", ""),
@@ -289,6 +462,22 @@ class Orchestrator:
         finally:
             self.inference_in_progress = False
             self.last_response_ms = int((time.monotonic() - t0) * 1000)
+
+        # Init mode: detect completion signal → write proposed file
+        if self.is_init_mode and "[INIT_COMPLETE]" in reply:
+            profile = self._extract_profile(reply)
+            proposed_dir = self.vault / ".proposed"
+            proposed_dir.mkdir(parents=True, exist_ok=True)
+            proposed_path = proposed_dir / "LOCAL_MIND_FOUNDATION.md"
+            proposed_path.write_text(self._build_foundation_md(profile), encoding="utf-8")
+            self.init_handoff = {
+                "reply": reply,
+                "profile_draft": profile,
+                "proposal_file": ".proposed/LOCAL_MIND_FOUNDATION.md",
+            }
+            self.init_state["phase"] = "handoff"
+            self.init_state["profile_draft"] = profile
+            self._save_init_state()
 
         # Only clean text exchanges go into history — tool call traces are transient
         self.history.append({"role": "user", "content": user_message})
@@ -379,6 +568,7 @@ class Handler(BaseHTTPRequestHandler):
             "num_ctx": OLLAMA_NUM_CTX,
             "system_prompt_chars": prompt_chars,
             "system_prompt_tokens_est": prompt_chars // 4,
+            "init_mode": orch.is_init_mode,
             "memory_files_loaded": orch.prompt_stats["memory_files_loaded"],
             "skills_in_index": orch.prompt_stats["skills_in_index"],
             "history_turns": history_turns,
@@ -398,7 +588,17 @@ class Handler(BaseHTTPRequestHandler):
             timeout = int(body.get("timeout_s", OLLAMA_TIMEOUT))
             try:
                 reply = self.orchestrator.chat(message, timeout=timeout)
-                self._respond(200, {"response": reply})
+                resp = {"response": reply}
+                if self.orchestrator.init_handoff:
+                    pf = self.orchestrator.init_handoff.get("proposal_file")
+                    if pf:
+                        proposed_path = self.orchestrator.vault / pf
+                        if proposed_path.exists():
+                            resp["proposal"] = {
+                                "path": pf,
+                                "content": proposed_path.read_text(encoding="utf-8"),
+                            }
+                self._respond(200, resp)
             except requests.exceptions.Timeout:
                 self._respond(504, {"error": f"model did not respond within {timeout}s"})
             except Exception as e:
@@ -406,7 +606,11 @@ class Handler(BaseHTTPRequestHandler):
 
         elif self.path == "/reset":
             self.orchestrator.reset()
-            self._respond(200, {"status": "conversation reset"})
+            body = {"status": "conversation reset"}
+            if self.orchestrator.is_init_mode:
+                body["init_mode"] = True
+                body["message"] = "Init state cleared. You can start over."
+            self._respond(200, body)
 
         else:
             self._respond(404, {"error": "not found"})

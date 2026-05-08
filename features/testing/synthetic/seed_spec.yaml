@@ -1,0 +1,46 @@
+# Deterministic synthetic vault for testing — no real operator data
+projects:
+  - name: Alpha Initiative
+    status: active
+    priority: 1
+    brief: "Core platform modernization effort for the organization"
+  - name: Beta Platform
+    status: on-hold
+    priority: 2
+    brief: "Secondary platform development — paused pending Alpha completion"
+
+tasks:
+  - title: Review quarterly budget
+    project: Alpha Initiative
+    status: queued
+    context: computer
+    duration: short
+    goal_date: "2026-06-01"
+  - title: Schedule team sync with stakeholders
+    project: Alpha Initiative
+    status: done
+    context: phone-call
+    duration: short
+    completed: "2026-04-15"
+  - title: Write technical spec for API redesign
+    project: Beta Platform
+    status: queued
+    context: computer
+    duration: long
+  - title: Follow up with vendor on contract renewal
+    project: Alpha Initiative
+    status: waiting
+    context: phone-call
+    duration: short
+
+insights:
+  - title: "Simpler interfaces reduce coordination overhead"
+    body: "Every abstraction layer added to reduce complexity adds its own complexity. The net gain requires evidence, not assumption."
+  - title: "Testing surfaces assumptions"
+    body: "A failing test is not a problem to fix. It is an assumption made explicit. The test reveals what was hidden."
+
+daily_notes:
+  - date: "2026-04-28"
+    body: "Worked on Alpha Initiative budget review. Queued task for next session."
+  - date: "2026-04-29"
+    body: "Team sync completed. Beta Platform spec still pending."
