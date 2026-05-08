@@ -110,10 +110,12 @@ def main():
                         help="Override Ollama base URL (e.g. http://10.0.0.78:11434)")
     parser.add_argument("--snapshot", action="store_true", default=False,
                         help="Copy vault to a temp dir before running; delete after. Safe for live vaults.")
+    parser.add_argument("--battery", default="prompts",
+                        help="Prompt battery file stem in battery/ dir (default: prompts)")
     args = parser.parse_args()
 
     config_path = REPO_ROOT / "operator" / "config.yaml"
-    prompts_path = Path(__file__).parent / "battery" / "prompts.yaml"
+    prompts_path = Path(__file__).parent / "battery" / f"{args.battery}.yaml"
 
     if args.vault == "synthetic":
         vault_path = Path(__file__).parent / "synthetic" / "vault"
