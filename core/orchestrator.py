@@ -121,12 +121,14 @@ def parse_skill_trigger(message: str) -> str | None:
 
 
 class Orchestrator:
-    def __init__(self, vault_path: str):
+    def __init__(self, vault_path: str, test_mode: bool = False):
         self.vault = Path(vault_path)
         self.is_init_mode = self._is_first_run()
         self.history: list[dict] = []
         self.inference_in_progress: bool = False
         self.last_response_ms: int | None = None
+        self.last_tool_calls: list[str] = []
+        self.test_mode = test_mode
 
         if self.is_init_mode:
             self._enter_init_mode()
@@ -192,7 +194,12 @@ class Orchestrator:
     def _save_init_state(self):
         path = self.vault / INIT_STATE_PATH
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(self.init_state, indent=2), encoding="utf-8")
+        # Convert non-serializable types (e.g. date) to strings
+        def _convert(o):
+            if hasattr(o, "isoformat"):
+                return o.isoformat()
+            raise TypeError(f"Object of type {o.__class__.__name__} is not JSON serializable")
+        path.write_text(json.dumps(self.init_state, indent=2, default=_convert), encoding="utf-8")
 
     def _clear_init_state(self):
         path = self.vault / INIT_STATE_PATH
@@ -361,6 +368,7 @@ class Orchestrator:
                     return json.dumps({"error": "In init mode, write tools are limited to Inbox.md"})
                 return json.dumps({"error": "Vault tools are unavailable during init mode"})
 
+            self.last_tool_calls.append(name)
             kb = self.kb
             if name == "search_vault":
                 return json.dumps(kb.search(args["query"], top_k=args.get("top_k", 5)))
@@ -387,6 +395,7 @@ class Orchestrator:
     # --- Chat -------------------------------------------------------------------
 
     def chat(self, user_message: str, timeout: int = OLLAMA_TIMEOUT) -> str:
+        self.last_tool_calls = []
         # Init mode: check for handoff confirmation
         if self.is_init_mode and self.init_handoff:
             if is_confirmation(user_message):
