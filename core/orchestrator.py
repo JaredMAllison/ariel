@@ -629,5 +629,5 @@ def run(vault_path: str):
 
 if __name__ == "__main__":
     _cfg = load_config()
-    vault = sys.argv[1] if len(sys.argv) > 1 else _cfg.get("vault_path", str(Path.home() / "Documents/Obsidian/Marlin"))
+    vault = sys.argv[1] if len(sys.argv) > 1 else _cfg.get("vault_path", str(Path.home() / "Documents" / "vault"))
     run(vault)

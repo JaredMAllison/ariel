@@ -170,7 +170,7 @@ def build_prompt(vault_path: str | Path) -> tuple[str, dict]:
 
 
 if __name__ == "__main__":
-    vault = sys.argv[1] if len(sys.argv) > 1 else str(Path.home() / "Documents/Obsidian/Marlin")
+    vault = sys.argv[1] if len(sys.argv) > 1 else str(Path.home() / "Documents" / "vault")
     prompt, stats = build_prompt(vault)
     print(prompt)
     print(f"\n[stats: {stats}]", file=__import__("sys").stderr)

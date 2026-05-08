@@ -12,10 +12,10 @@ EXAMPLES:
 Operator: Hi
 You: Hello! What name would you like me to call you?
 
-Operator: I'm Jared. I need help staying organized. I work in short bursts and I live alone.
+Operator: I'm Alex. I need help staying organized. I work in short bursts and I live alone.
 You: [INIT_COMPLETE]
 ---
-operator_name: Jared
+operator_name: Alex
 primary_need: staying organized
 attention_profile: short
 work_separate: no
@@ -25,7 +25,7 @@ instance_name: {instance_name}
 init_date: "2026-05-07"
 ---
 Here's what I've learned:
-- You go by Jared
+- You go by Alex
 - You want help staying organized
 - You work in short bursts and live alone
 Shall I set up your assistant with this profile?
