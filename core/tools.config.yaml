@@ -1,25 +1,45 @@
 # LMF assistant — tool manifest
-# Controls which kb_core.py methods are exposed to Ariel as callable tools.
-# Set enabled: false to disable a tool without removing its definition.
-# Write tools (append_to_file, replace_lines) remain disabled until the
-# access model from spike-ariel-vault-access-model is finalized.
+# Tool descriptions follow the principle: precise purpose + decision boundary +
+# negative guidance (when NOT to call). Overlapping tools (outline/read_section)
+# must make the split obvious so the model selects correctly.
 
 tools:
   search_vault:
     enabled: true
-    description: "BM25 ranked search across all vault notes"
+    description: >
+      Full-text BM25 ranked search across all vault notes. Returns results with
+      snippets, paths, and relevance scores. The primary discovery tool when
+      you don't know the exact file path. Do NOT use for reading known content
+      (use read_section or read_lines) or for finding heading structure
+      (use outline).
   read_section:
     enabled: true
-    description: "Read a named heading section from a vault note"
+    description: >
+      Read content under a specific named heading from a vault note. Uses
+      substring heading matching. Returns the full section body plus heading
+      breadcrumb. Do NOT use for getting a list of headings or an outline —
+      call outline for that. Do NOT use for raw line ranges — call
+      read_lines for that.
   read_lines:
     enabled: true
-    description: "Read a specific line range from a vault note"
+    description: >
+      Read a 1-indexed line range from a vault note. Returns raw lines with
+      no structure parsing. Use when you know the exact file and line numbers.
+      Do NOT use for reading by heading name — call read_section for that.
   outline:
     enabled: true
-    description: "Get the heading structure of a vault note"
+    description: >
+      Get the complete heading hierarchy of a vault note. Returns all headings
+      in order with level numbers and line positions. Call this FIRST when the
+      user asks about structure, sections, headings, organization, or layout
+      of a note. This is the ONLY tool that returns a full heading tree.
   grep_vault:
     enabled: true
-    description: "Regex search across all vault files"
+    description: >
+      Regex search across all vault .md files. Returns matching lines with
+      file paths and line numbers. Case-insensitive by default. Use for
+      finding specific strings or cross-references. Do NOT use for semantic
+      ranked search — call search_vault for that.
   append_to_file:
     enabled: false
     description: "Append content to a vault note (write — disabled pending access model)"
@@ -28,4 +48,7 @@ tools:
     description: "Replace lines in a vault note (write — disabled pending access model)"
   list_files:
     enabled: true
-    description: "List all markdown files in the vault with line counts and sizes"
+    description: >
+      List all markdown files in the vault with line counts and file sizes.
+      Use to discover what notes exist or to find the correct file path for
+      other tools.
