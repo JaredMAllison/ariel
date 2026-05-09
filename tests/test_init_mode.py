@@ -14,7 +14,6 @@ def test_init_mode_detection():
     try:
         orch = Orchestrator(str(tmpdir))
         assert orch.is_init_mode == True
-        assert orch.kb is None
         assert orch.tools == []
         print("PASS: Empty vault -> init mode")
     finally:

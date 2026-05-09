@@ -28,20 +28,6 @@ from pathlib import Path
 import requests
 import yaml
 
-# kb_core lives in the MCP server directory — shared library per ADR-003
-_KB_CORE_DIR = Path.home() / ".local/share/obsidian-mcp"
-_KB_VENV_SITE = _KB_CORE_DIR / ".venv/lib/python3.12/site-packages"
-for _p in (str(_KB_CORE_DIR), str(_KB_VENV_SITE)):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
-try:
-    from kb_core import KnowledgeBase
-    KB_AVAILABLE = True
-except ImportError as _e:
-    print(f"[orchestrator] Warning: kb_core unavailable — {_e}. Tools disabled.", file=sys.stderr)
-    KB_AVAILABLE = False
-
 from build_prompt import build_prompt
 
 from backends import build_backend, BackendError, RateLimitError, BackendResult
@@ -197,13 +183,14 @@ class Orchestrator:
         self.init_handoff = None
         self.test_mode = test_mode
 
+        self.loom_url = os.environ.get("LOOM_URL", "http://knowledge-loom:8888")
+
         if self.is_init_mode:
             self._enter_init_mode()
         else:
             self.system_prompt, self.prompt_stats = build_prompt(vault_path)
-            self.kb = KnowledgeBase(self.vault) if KB_AVAILABLE else None
             tools_config = Path(__file__).parent / "tools.config.yaml"
-            self.tools = self._build_tools(tools_config) if self.kb else []
+            self.tools = self._build_tools(tools_config)
 
         print(f"[orchestrator] Vault: {self.vault}")
         print(f"[orchestrator] System prompt: {len(self.system_prompt)} chars")
@@ -240,7 +227,6 @@ class Orchestrator:
             resume_context=resume_context,
         )
         self.prompt_stats = {"memory_files_loaded": 0, "skills_in_index": 0}
-        self.kb = None
         self.tools = []
         self.init_state = init_state
         self.init_handoff = None
@@ -327,9 +313,8 @@ class Orchestrator:
         self.system_prompt, self.prompt_stats = build_prompt(str(self.vault))
         self.is_init_mode = False
         self.init_handoff = None
-        self.kb = KnowledgeBase(self.vault) if KB_AVAILABLE else None
         tools_config = Path(__file__).parent / "tools.config.yaml"
-        self.tools = self._build_tools(tools_config) if self.kb else []
+        self.tools = self._build_tools(tools_config)
         self._clear_init_state()
 
         cfg = load_config()
@@ -398,6 +383,11 @@ class Orchestrator:
             },
             "required": ["file_path", "start_line", "end_line", "new_content"],
         },
+        "list_files": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
     }
 
     def _build_tools(self, config_path: Path) -> list[dict]:
@@ -421,6 +411,125 @@ class Orchestrator:
             })
         return result
 
+    # --- Direct vault I/O helpers ------------------------------------------------
+
+    @staticmethod
+    def _tokenize(text: str) -> list[str]:
+        return re.findall(r'\b[a-z0-9]+\b', text.lower())
+
+    def _tool_search(self, query: str, top_k: int = 5) -> list[dict]:
+        try:
+            resp = requests.post(
+                f"{self.loom_url}/api/search",
+                json={"query": query, "limit": top_k},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("results", [])
+        except requests.exceptions.ConnectionError:
+            raise RuntimeError("Vault search unavailable — is knowledge-loom running?")
+
+    def _tool_outline(self, file_path: str) -> list[dict] | dict:
+        target = self.vault / file_path
+        if not target.exists():
+            return {"error": f"File not found: {file_path}"}
+        result = []
+        for i, line in enumerate(target.read_text(encoding="utf-8").splitlines(), 1):
+            m = re.match(r'^(#{1,6})\s+(.+)$', line)
+            if m:
+                result.append({"level": len(m.group(1)), "heading": m.group(2).strip(), "line_number": i})
+        return result
+
+    def _tool_read_section(self, file_path: str, heading: str) -> dict | None:
+        target = self.vault / file_path
+        if not target.exists():
+            return {"error": f"File not found: {file_path}"}
+        lines = target.read_text(encoding="utf-8").splitlines()
+        heading_lower = heading.lower()
+        heading_stack = []
+        for i, line in enumerate(lines, 1):
+            m = re.match(r'^(#{1,6})\s+(.+)$', line)
+            if m:
+                level = len(m.group(1))
+                heading_text = m.group(2).strip()
+                while heading_stack and heading_stack[-1][0] >= level:
+                    heading_stack.pop()
+                heading_stack.append((level, heading_text, i))
+                breadcrumb = " > ".join(h[1] for h in heading_stack)
+                if heading_lower in breadcrumb.lower():
+                    content_start = i + 1
+                    j = content_start - 1
+                    while j < len(lines) and not re.match(r'^#{1,6}\s+', lines[j]):
+                        j += 1
+                    content = "\n".join(lines[content_start - 1:j]).strip()
+                    return {
+                        "file": file_path,
+                        "heading": breadcrumb,
+                        "heading_line": i,
+                        "content_start": content_start,
+                        "content_end": j,
+                        "content": content,
+                    }
+        return None
+
+    def _tool_read_lines(self, file_path: str, start_line: int, end_line: int) -> dict | None:
+        target = self.vault / file_path
+        if not target.exists():
+            return None
+        lines = target.read_text(encoding="utf-8").splitlines()
+        start = max(1, start_line)
+        end = min(len(lines), end_line)
+        return {
+            "file": file_path,
+            "start_line": start,
+            "end_line": end,
+            "content": "\n".join(lines[start - 1:end]),
+        }
+
+    def _tool_grep(self, pattern: str, file_filter: str | None = None, limit: int = 50) -> list[dict]:
+        try:
+            regex = re.compile(pattern, re.IGNORECASE)
+        except re.error as e:
+            return [{"error": f"Invalid regex: {e}"}]
+        results = []
+        for fp in sorted(self.vault.rglob("*.md")):
+            rel = fp.relative_to(self.vault).as_posix()
+            if file_filter and file_filter not in rel:
+                continue
+            for i, line in enumerate(fp.read_text(encoding="utf-8").splitlines(), 1):
+                if regex.search(line):
+                    results.append({"file": rel, "line_number": i, "line_text": line[:500]})
+                    if len(results) >= limit:
+                        return results
+        return results
+
+    def _tool_append_to_file(self, file_path: str, content: str) -> dict:
+        target = self.vault / file_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        current = target.read_text(encoding="utf-8").splitlines() if target.exists() else []
+        new_lines = current + ["", content]
+        target.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+        return {"file": file_path, "appended_at_line": len(new_lines)}
+
+    def _tool_replace_lines(self, file_path: str, start_line: int, end_line: int, new_content: str) -> dict:
+        target = self.vault / file_path
+        lines = target.read_text(encoding="utf-8").splitlines()
+        start = max(1, start_line)
+        end = min(len(lines), end_line)
+        new_lines = lines[:start - 1] + new_content.splitlines() + lines[end:]
+        target.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+        return {"file": file_path, "replaced_lines": end - start + 1, "new_line_count": len(new_lines)}
+
+    def _tool_list_files(self) -> list[dict]:
+        files = []
+        for fp in sorted(self.vault.rglob("*.md")):
+            rel = fp.relative_to(self.vault).as_posix()
+            lines = fp.read_text(encoding="utf-8").splitlines()
+            size_kb = round(fp.stat().st_size / 1024, 1)
+            files.append({"file": rel, "line_count": len(lines), "size_kb": size_kb})
+        return files
+
     def _dispatch_tool(self, name: str, args: dict) -> str:
         try:
             # Init mode write gate — only append_to_file to Inbox.md
@@ -436,25 +545,27 @@ class Orchestrator:
                 return json.dumps({"error": "Vault tools are unavailable during init mode"})
 
             self.last_tool_calls.append(name)
-            kb = self.kb
+
             if name == "search_vault":
-                return json.dumps(kb.search(args["query"], top_k=args.get("top_k", 5)))
+                return json.dumps(self._tool_search(args["query"], top_k=args.get("top_k", 5)))
             if name == "read_section":
-                r = kb.read_section(args["file_path"], args["heading"])
+                r = self._tool_read_section(args["file_path"], args["heading"])
                 return json.dumps(r if r else {"error": "Section not found"})
             if name == "read_lines":
-                r = kb.read_lines(args["file_path"], args["start_line"], args["end_line"])
+                r = self._tool_read_lines(args["file_path"], args["start_line"], args["end_line"])
                 return json.dumps(r if r else {"error": "File not found"})
             if name == "outline":
-                return json.dumps(kb.outline(args["file_path"]))
+                return json.dumps(self._tool_outline(args["file_path"]))
             if name == "grep_vault":
-                return json.dumps(kb.grep(args["pattern"], file_filter=args.get("file_filter")))
+                return json.dumps(self._tool_grep(args["pattern"], file_filter=args.get("file_filter")))
             if name == "append_to_file":
-                return json.dumps(kb.append_to_file(args["file_path"], args["content"]))
+                return json.dumps(self._tool_append_to_file(args["file_path"], args["content"]))
             if name == "replace_lines":
-                return json.dumps(kb.replace_lines(
+                return json.dumps(self._tool_replace_lines(
                     args["file_path"], args["start_line"], args["end_line"], args["new_content"]
                 ))
+            if name == "list_files":
+                return json.dumps(self._tool_list_files())
             return json.dumps({"error": f"Unknown tool: {name}"})
         except Exception as e:
             return json.dumps({"error": str(e)})

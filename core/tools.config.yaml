@@ -26,3 +26,6 @@ tools:
   replace_lines:
     enabled: false
     description: "Replace lines in a vault note (write — disabled pending access model)"
+  list_files:
+    enabled: true
+    description: "List all markdown files in the vault with line counts and sizes"
