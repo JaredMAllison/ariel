@@ -16,6 +16,7 @@ Endpoints:
 """
 
 import json
+import os
 import re
 import shutil
 import sys
@@ -43,6 +44,8 @@ except ImportError as _e:
 
 from build_prompt import build_prompt
 
+from backends import build_backend, BackendError, RateLimitError, BackendResult
+
 # Write tool names — used for tool gating in init mode
 _WRITE_TOOLS = {"append_to_file", "replace_lines", "create_file", "insert_after_heading"}
 
@@ -66,13 +69,33 @@ def load_deploy_config(vault: Path) -> dict:
     return default
 
 
+def _resolve_env(value):
+    """Replace ${VAR_NAME} patterns with environment variables. String or dict/list traversal.
+    Logs a warning for any unresolvable ENV references found during config load."""
+    if isinstance(value, str):
+        def _replace(m):
+            var = m.group(1)
+            val = os.environ.get(var)
+            if val is None:
+                print(f"[orchestrator] WARNING: env var ${var} not set — keeping literal '{m.group(0)}'", file=sys.stderr)
+                return m.group(0)
+            return val
+        return re.sub(r'\$\{(\w+)\}', _replace, value)
+    if isinstance(value, dict):
+        return {k: _resolve_env(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_resolve_env(v) for v in value]
+    return value
+
+
 def load_config(config_path: Path | None = None) -> dict:
-    """Load operator config from YAML. Calls sys.exit if the file is missing."""
+    """Load operator config from YAML. Resolves ${VAR} env references.
+    Calls sys.exit if the file is missing."""
     if config_path is None:
         config_path = Path(__file__).parent.parent / "operator" / "config.yaml"
     if not config_path.exists():
         sys.exit("[orchestrator] No operator config found — run python3 init.py to set up.")
-    return yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    return _resolve_env(yaml.safe_load(config_path.read_text(encoding="utf-8")))
 
 
 # Sentinel values — overwritten by _init_config() at startup, never at import time
@@ -88,17 +111,60 @@ PORT              = 8742
 SKILLS_DIR        = "System/Skills"
 UI_FILE           = Path(__file__).parent.parent / "features" / "ui" / "ariel.html"
 
+# Backend + pacing globals — populated by _init_backends()
+BACKENDS          : list[tuple[int, object]] = []
+ACTIVE_BACKEND    : str | None = None
+TURBO_MODE        = False
+PACING_INTERVAL   = 8
+LAST_REQUEST_TIME = 0.0
+
 
 def _init_config(config_path: Path | None = None) -> None:
     """Read operator config and populate runtime globals. Called only inside run()."""
     global OLLAMA_URL, OLLAMA_PS_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT, OLLAMA_NUM_CTX, PORT
+    global BACKENDS, ACTIVE_BACKEND, TURBO_MODE, PACING_INTERVAL, LAST_REQUEST_TIME
     cfg = load_config(config_path)
-    OLLAMA_URL     = cfg["ollama_url"]
-    OLLAMA_PS_URL  = cfg["ollama_url"].replace("/api/chat", "/api/ps")
-    OLLAMA_MODEL   = cfg["model"]
-    OLLAMA_TIMEOUT = int(cfg["timeout_s"])
-    OLLAMA_NUM_CTX = int(cfg["num_ctx"])
-    PORT           = int(cfg["port"])
+
+    # Legacy single-backend fields (backwards compat — used by status endpoint for Ollama)
+    OLLAMA_URL     = cfg.get("ollama_url", "http://localhost:11434/api/chat")
+    OLLAMA_PS_URL  = OLLAMA_URL.replace("/api/chat", "/api/ps")
+    OLLAMA_MODEL   = cfg.get("model", "qwen2.5:3b")
+    OLLAMA_TIMEOUT = int(cfg.get("timeout_s", 300))
+    OLLAMA_NUM_CTX = int(cfg.get("num_ctx", 8192))
+    PORT           = int(cfg.get("port", 8742))
+
+    # Pacing
+    pacing = cfg.get("pacing", {})
+    TURBO_MODE     = pacing.get("mode", "slow") == "turbo"
+    PACING_INTERVAL = int(pacing.get("interval_s", 8))
+    LAST_REQUEST_TIME = 0.0
+
+    # Backends
+    BACKENDS = []
+    for entry in cfg.get("backends", []):
+        name = entry["name"]
+        # Check for unresolved env vars
+        if entry.get("type") == "openai":
+            key = entry.get("api_key", "")
+            if not key or key.startswith("${"):
+                print(f"[orchestrator] WARNING: backend '{name}' has no API key (env var {key} unresolved) — skipping", file=sys.stderr)
+                continue
+        backend = build_backend(name, entry)
+        priority = int(entry.get("priority", 99))
+        BACKENDS.append((priority, backend))
+    BACKENDS.sort(key=lambda x: x[0])  # lowest priority = tried first
+
+    # Fallback: if no backends configured, create an Ollama backend from legacy fields
+    if not BACKENDS:
+        fallback_cfg = {
+            "type": "ollama",
+            "base_url": OLLAMA_URL.rstrip("/api/chat"),
+            "model": OLLAMA_MODEL,
+            "num_ctx": OLLAMA_NUM_CTX,
+        }
+        BACKENDS.append((0, build_backend("legacy-ollama", fallback_cfg)))
+
+    ACTIVE_BACKEND = None
 
 
 def load_skill(vault: Path, name: str) -> str | None:
@@ -128,6 +194,7 @@ class Orchestrator:
         self.inference_in_progress: bool = False
         self.last_response_ms: int | None = None
         self.last_tool_calls: list[str] = []
+        self.init_handoff = None
         self.test_mode = test_mode
 
         if self.is_init_mode:
@@ -395,6 +462,7 @@ class Orchestrator:
     # --- Chat -------------------------------------------------------------------
 
     def chat(self, user_message: str, timeout: int = OLLAMA_TIMEOUT) -> str:
+        global TURBO_MODE, PACING_INTERVAL, LAST_REQUEST_TIME
         self.last_tool_calls = []
         # Init mode: check for handoff confirmation
         if self.is_init_mode and self.init_handoff:
@@ -403,6 +471,12 @@ class Orchestrator:
             else:
                 shutil.rmtree(self.vault / ".proposed", ignore_errors=True)
                 self.init_handoff = None
+
+        # --- Turbo toggle (intercepted before model) ---
+        if user_message.strip().lower() in ("/marlin-turbo", "/turbo"):
+            TURBO_MODE = not TURBO_MODE
+            state = "Turbo ON — pacing disabled" if TURBO_MODE else "Slow mode ON — pacing active"
+            return state
 
         messages = [{"role": "system", "content": self.system_prompt}]
 
@@ -427,28 +501,46 @@ class Orchestrator:
         t0 = time.monotonic()
         reply = ""
         try:
+            # ---- Pacing ----
+            if not TURBO_MODE and LAST_REQUEST_TIME > 0:
+                elapsed = time.monotonic() - LAST_REQUEST_TIME
+                if elapsed < PACING_INTERVAL:
+                    wait = PACING_INTERVAL - elapsed
+                    time.sleep(wait)
+            LAST_REQUEST_TIME = time.monotonic()
+
+            # ---- Backend dispatch ----
             for _ in range(MAX_TOOL_LOOPS):
-                payload: dict = {
-                    "model": OLLAMA_MODEL,
-                    "messages": messages,
-                    "stream": False,
-                    "options": {"num_ctx": OLLAMA_NUM_CTX},
-                }
-                if self.tools:
-                    payload["tools"] = self.tools
+                result = None
+                last_error = None
+                for priority, backend in BACKENDS:
+                    if not backend.is_available:
+                        continue
+                    try:
+                        result = backend.chat(messages, tools=self.tools, timeout=timeout)
+                        global ACTIVE_BACKEND
+                        ACTIVE_BACKEND = backend.name
+                        last_error = None
+                        break
+                    except RateLimitError:
+                        last_error = f"{backend.name} rate limited"
+                        continue
+                    except BackendError as e:
+                        last_error = str(e)
+                        continue
 
-                response = requests.post(OLLAMA_URL, json=payload, timeout=timeout)
-                response.raise_for_status()
-                msg = response.json()["message"]
+                if result is None:
+                    reply = f"[All backends exhausted: {last_error}]"
+                    break
 
-                tool_calls = msg.get("tool_calls")
+                tool_calls = result.tool_calls
                 if not tool_calls:
-                    reply = msg.get("content", "")
+                    reply = result.content
                     break
 
                 messages.append({
                     "role": "assistant",
-                    "content": msg.get("content", ""),
+                    "content": result.content,
                     "tool_calls": tool_calls,
                 })
                 for tc in tool_calls:
@@ -574,6 +666,11 @@ class Handler(BaseHTTPRequestHandler):
             "history_turns": history_turns,
             "inference_in_progress": orch.inference_in_progress,
             "last_response_ms": orch.last_response_ms,
+            "turbo_mode": TURBO_MODE,
+            "pacing_interval_s": PACING_INTERVAL,
+            "active_backend": ACTIVE_BACKEND,
+            "backends": [{"name": b.name, "available": b.is_available, "last_error": b.last_error}
+                         for _, b in BACKENDS],
         })
 
     def do_POST(self):
@@ -603,6 +700,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._respond(504, {"error": f"model did not respond within {timeout}s"})
             except Exception as e:
                 self._respond(500, {"error": str(e)})
+
+        elif self.path == "/turbo":
+            global TURBO_MODE
+            TURBO_MODE = not TURBO_MODE
+            self._respond(200, {"turbo": TURBO_MODE, "pacing": "disabled" if TURBO_MODE else f"every {PACING_INTERVAL}s"})
 
         elif self.path == "/reset":
             self.orchestrator.reset()
