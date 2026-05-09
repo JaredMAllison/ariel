@@ -1,5 +1,8 @@
 # LMF — Local Mind Foundation
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](requirements.txt)
+
 A locally-sovereign AI assistant orchestrator for personal knowledge vaults. Designed for neurodivergent users who need cognitive prosthetics — not productivity tools.
 
 LMF runs entirely on your hardware. No cloud dependency. No data leaves your machine. The assistant reads your vault, surfaces relevant context, and helps you think — on your terms.
@@ -43,7 +46,7 @@ Built for people who need the system to find them, not the other way around.
 ## Quick Start
 
 ```bash
-pip install requests pyyaml
+pip install -r requirements.txt
 python init.py              # first-time setup
 python core/orchestrator.py # start the assistant
 ```
