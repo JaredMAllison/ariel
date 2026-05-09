@@ -151,7 +151,10 @@ def main():
         if args.snapshot and vault_type == "operator":
             tmp_dir = Path(tempfile.mkdtemp(prefix="ariel-test-vault-"))
             print(f"  Snapshotting vault → {tmp_dir} ...", flush=True)
-            shutil.copytree(vault_path, tmp_dir / "vault")
+            shutil.copytree(
+                vault_path, tmp_dir / "vault",
+                ignore=shutil.ignore_patterns('.knowledge-loom-index'),
+            )
             vault_path = tmp_dir / "vault"
             print(f"  Snapshot ready. Original vault untouched.", flush=True)
 
