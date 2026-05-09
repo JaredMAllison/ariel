@@ -1,0 +1,155 @@
+avg_response_ms: 8940
+content_match_rate: 0.6667
+date: '2026-05-08'
+gpu_accelerated: false
+grounding_rate: 0.0
+hallucination_rate: 1.0
+inference_host: TPC-2026-Jared
+model: qwen2.5:3b
+prompt_results:
+- expected_tool:
+  - search_vault
+  - grep_vault
+  grounding_term: null
+  id: T001
+  passed: false
+  response: '[All backends exhausted: gretchen-fallback unreachable]'
+  response_ms: 3
+  tool_calls_made: []
+  type: tool_exercise
+- expected_tool: outline
+  grounding_term: null
+  id: T002
+  passed: false
+  response: '[All backends exhausted: gretchen-fallback unreachable]'
+  response_ms: 7998
+  tool_calls_made: []
+  type: tool_exercise
+- expected_tool:
+  - search_vault
+  - grep_vault
+  grounding_term: null
+  id: T003
+  passed: false
+  response: '[All backends exhausted: gretchen-fallback unreachable]'
+  response_ms: 8001
+  tool_calls_made: []
+  type: tool_exercise
+- expected_tool: read_section
+  grounding_term: null
+  id: T004
+  passed: false
+  response: '[All backends exhausted: None]'
+  response_ms: 7997
+  tool_calls_made: []
+  type: tool_exercise
+- expected_tool: null
+  grounding_term: queued
+  id: G001
+  passed: false
+  response: '[All backends exhausted: None]'
+  response_ms: 7999
+  tool_calls_made: []
+  type: grounding
+- expected_tool: null
+  grounding_term: modernization
+  id: G002
+  passed: false
+  response: '[All backends exhausted: None]'
+  response_ms: 7999
+  tool_calls_made: []
+  type: grounding
+- expected_tool: null
+  grounding_term: assumption
+  id: G003
+  passed: false
+  response: '[All backends exhausted: None]'
+  response_ms: 8000
+  tool_calls_made: []
+  type: grounding
+- expected_tool: null
+  grounding_term: budget
+  id: G004
+  passed: false
+  response: '[All backends exhausted: None]'
+  response_ms: 8000
+  tool_calls_made: []
+  type: grounding
+- expected_tool: null
+  grounding_term: null
+  id: H001
+  passed: false
+  response: '[All backends exhausted: None]'
+  response_ms: 8000
+  tool_calls_made: []
+  type: hallucination_boundary
+- expected_tool: null
+  grounding_term: null
+  id: H002
+  passed: false
+  response: '[All backends exhausted: None]'
+  response_ms: 7999
+  tool_calls_made: []
+  type: hallucination_boundary
+- expected_tool: null
+  grounding_term: null
+  id: H003
+  passed: false
+  response: '[All backends exhausted: None]'
+  response_ms: 8000
+  tool_calls_made: []
+  type: hallucination_boundary
+- expected_tool: null
+  grounding_term: null
+  id: E001
+  passed: true
+  response: '[All backends exhausted: None]'
+  response_ms: 7999
+  tool_calls_made: []
+  type: tool_enforcement
+- expected_tool: null
+  grounding_term: null
+  id: E002
+  passed: true
+  response: '[All backends exhausted: None]'
+  response_ms: 8000
+  tool_calls_made: []
+  type: tool_enforcement
+- expected_tool: null
+  grounding_term: null
+  id: E003
+  passed: true
+  response: '[All backends exhausted: None]'
+  response_ms: 7999
+  tool_calls_made: []
+  type: tool_enforcement
+- expected_tool: null
+  grounding_term: null
+  id: W001
+  passed: false
+  response: '[All backends exhausted: None]'
+  response_ms: 16000
+  tool_calls_made: []
+  type: write_exercise
+- expected_tool: null
+  grounding_term: null
+  id: W002
+  passed: false
+  response: '[All backends exhausted: None]'
+  response_ms: 15999
+  tool_calls_made: []
+  type: write_exercise
+- expected_tool: null
+  grounding_term: null
+  id: W003
+  passed: false
+  response: '[All backends exhausted: None]'
+  response_ms: 16000
+  tool_calls_made: []
+  type: write_exercise
+stability_tier: 0
+tool_accuracy: 0.0
+tool_enforcement_pass: true
+vault_type: synthetic
+write_confirm_rate: 0.0
+write_gate_rate: 0.0

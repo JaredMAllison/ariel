@@ -647,6 +647,18 @@ class Orchestrator:
                 tool_calls = result.tool_calls
                 if not tool_calls:
                     reply = result.content
+                    # If reply is raw JSON proposing a tool call, re-prompt
+                    # the model to synthesize instead of returning JSON to UI
+                    if reply and re.match(r'^\s*\{\s*"name"\s*:\s*"', reply.strip()):
+                        messages.append({"role": "assistant", "content": reply})
+                        messages.append({
+                            "role": "user",
+                            "content": (
+                                "The tool call above has been handled. "
+                                "Now summarize what you found in natural language."
+                            ),
+                        })
+                        continue
                     break
 
                 messages.append({

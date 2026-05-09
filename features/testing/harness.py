@@ -144,7 +144,22 @@ def main():
         sys.exit(f"[harness] Battery not found: {prompts_path}")
 
     prompts = load_prompts(prompts_path, vault_type)
-    models = args.models or [args.model or orch_module.OLLAMA_MODEL]
+
+    # Resolve model name from config's priority-0 backend
+    if args.model:
+        model_name = args.model
+    elif args.models:
+        model_name = args.models[0]
+    else:
+        model_name = None
+        raw_cfg = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        for b in raw_cfg.get("backends", []):
+            if b.get("priority", 99) == 0:
+                model_name = b.get("model", b["name"])
+                break
+        if not model_name:
+            model_name = orch_module.OLLAMA_MODEL
+    models = args.models or [model_name]
 
     tmp_dir = None
     try:

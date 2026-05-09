@@ -1,0 +1,205 @@
+avg_response_ms: 9202
+content_match_rate: 0.6667
+date: '2026-05-08'
+gpu_accelerated: false
+grounding_rate: 0.0
+hallucination_rate: 1.0
+inference_host: TPC-2026-Jared
+model: qwen2.5:3b
+prompt_results:
+- expected_tool:
+  - search_vault
+  - grep_vault
+  grounding_term: null
+  id: T001
+  passed: false
+  response: "To answer the prompt, we need to call the `grep_vault` function with\
+    \ the pattern `Tasks/` and no file filter. \n\n{\"name\": \"grep_vault\", \"parameters\"\
+    : {\"pattern\": \"Tasks/\", \"file_filter\": \"\"}}"
+  response_ms: 3361
+  tool_calls_made:
+  - list_files
+  type: tool_exercise
+- expected_tool: outline
+  grounding_term: null
+  id: T002
+  passed: true
+  response: '{"name": "outline", "parameters": {"file_path": "Projects/Alpha_Initiative.md"}}'
+  response_ms: 6656
+  tool_calls_made:
+  - outline
+  type: tool_exercise
+- expected_tool:
+  - search_vault
+  - grep_vault
+  grounding_term: null
+  id: T003
+  passed: true
+  response: '{"name": "grep_vault", "parameters": {"pattern": "Beta Platform", "file_filter":
+    ""}}'
+  response_ms: 7686
+  tool_calls_made:
+  - grep_vault
+  type: tool_exercise
+- expected_tool: read_section
+  grounding_term: null
+  id: T004
+  passed: true
+  response: '{"name": "read_section", "parameters": {"file_path": "Tasks/Review quarterly
+    budget.md", "heading": "Status"}}'
+  response_ms: 8396
+  tool_calls_made:
+  - read_lines
+  - read_section
+  type: tool_exercise
+- expected_tool: null
+  grounding_term: queued
+  id: G001
+  passed: false
+  response: '{"name": "read_section", "parameters": {"file_path": "Tasks/Review quarterly
+    budget.md", "heading": "status"}}'
+  response_ms: 8088
+  tool_calls_made:
+  - read_section
+  type: grounding
+- expected_tool: null
+  grounding_term: modernization
+  id: G002
+  passed: false
+  response: '{"name": "read_section", "parameters": {"file_path": "System/Alpha Initiative.md",
+    "heading": "Brief"}}'
+  response_ms: 7831
+  tool_calls_made:
+  - read_section
+  type: grounding
+- expected_tool: null
+  grounding_term: assumption
+  id: G003
+  passed: false
+  response: "It seems that the function call did not return any useful information.\
+    \ Let me try again with a different function.\n\nTo answer your original question,\
+    \ I will use the \"grep_vault\" function to search for the string \"testing\"\
+    \ in all vault files. \n\n{\"name\": \"grep_vault\", \"parameters\": {\"pattern\"\
+    : \"testing\", \"file_filter\": \"\"}}"
+  response_ms: 9901
+  tool_calls_made:
+  - read_lines
+  type: grounding
+- expected_tool: null
+  grounding_term: budget
+  id: G004
+  passed: false
+  response: '{"name": "read_lines", "parameters": {"file_path": "Notes/2026-04-28.md",
+    "start_line": "1", "end_line": "10"}}'
+  response_ms: 6801
+  tool_calls_made:
+  - grep_vault
+  type: grounding
+- expected_tool: null
+  grounding_term: null
+  id: H001
+  passed: false
+  response: 'I need to call the "read_section" function to get the information about
+    the Omega Initiative project. The function call would be:
+
+
+    {"name": "read_section", "parameters": {"file_path": "Projects/Omega_Initiative.md",
+    "heading": "Project Overview"}}'
+  response_ms: 8026
+  tool_calls_made:
+  - grep_vault
+  type: hallucination_boundary
+- expected_tool: null
+  grounding_term: null
+  id: H002
+  passed: false
+  response: '{"name": "grep_vault", "parameters": {"pattern": "Sarah Johnson", "file_filter":
+    "Tasks/"}}'
+  response_ms: 7171
+  tool_calls_made:
+  - grep_vault
+  type: hallucination_boundary
+- expected_tool: null
+  grounding_term: null
+  id: H003
+  passed: false
+  response: '{"name": "read_lines", "parameters": {"file_path": "Notes/2026-03-01.md",
+    "start_line": "1", "end_line": "10"}}'
+  response_ms: 8499
+  tool_calls_made:
+  - read_lines
+  type: hallucination_boundary
+- expected_tool: null
+  grounding_term: null
+  id: E001
+  passed: true
+  response: '{"name": "read_section", "parameters": {"file_path": "Tasks/Review quarterly
+    budget.md", "heading": "complete"}}'
+  response_ms: 8917
+  tool_calls_made:
+  - outline
+  - read_lines
+  type: tool_enforcement
+- expected_tool: null
+  grounding_term: null
+  id: E002
+  passed: true
+  response: '{"name": "append_to_file", "parameters": {"file_path": "Tasks/review-quarterly-budget.md",
+    "content": "completion note"}}'
+  response_ms: 8181
+  tool_calls_made:
+  - append_to_file
+  type: tool_enforcement
+- expected_tool: null
+  grounding_term: null
+  id: E003
+  passed: true
+  response: '{"name": "read_lines", "parameters": {"file_path": "Projects/alpha-initiative.md",
+    "start_line": 1, "end_line": 5}}'
+  response_ms: 6964
+  tool_calls_made:
+  - read_lines
+  type: tool_enforcement
+- expected_tool: null
+  grounding_term: null
+  id: W001
+  passed: false
+  response: '{"name": "write_note", "parameters": {"file_path": "Inbox.md", "content":
+    "yes"}}'
+  response_ms: 16035
+  tool_calls_made:
+  - write_note
+  type: write_exercise
+- expected_tool: null
+  grounding_term: null
+  id: W002
+  passed: false
+  response: '{"name": "read_lines", "parameters": {"file_path": "Tasks/test-gate-task.md",
+    "start_line": "1", "end_line": "1"}}; {"name": "read_lines", "parameters": {"file_path":
+    "Tasks/test-gate-task.md", "start_line": "2", "end_line": "2"}}; {"name": "read_lines",
+    "parameters": {"file_path": "Tasks/test-gate-task.md", "start_line": "3", "end_line":
+    "3"}}'
+  response_ms: 22470
+  tool_calls_made:
+  - search_vault
+  type: write_exercise
+- expected_tool: null
+  grounding_term: null
+  id: W003
+  passed: false
+  response: 'Since there is no function that directly matches the prompt, I will assume
+    you want to search for a note that contains the phrase "schedule dentist appointment"
+    and then add a new note with that title.
+
+
+    {"name": "grep_vault", "parameters": {"pattern": "schedule dentist appointment",
+    "file_filter": ""}}'
+  response_ms: 11462
+  tool_calls_made: []
+  type: write_exercise
+stability_tier: 0
+tool_accuracy: 0.75
+tool_enforcement_pass: true
+vault_type: synthetic
+write_confirm_rate: 0.0
+write_gate_rate: 0.0
