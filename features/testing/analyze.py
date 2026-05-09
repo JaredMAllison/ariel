@@ -109,24 +109,25 @@ def analyze_one(prompt: dict, result: dict) -> list[str]:
     return lines
 
 
-def print_summary(scores: dict):
-    print(f"\n  {'=' * 60}")
-    print(f"  SUMMARY")
-    print(f"  {'=' * 60}")
-    print(f"  Tool accuracy:      {scores.get('tool_accuracy', '?'):>6}")
-    print(f"  Grounding rate:     {scores.get('grounding_rate', '?'):>6}")
-    print(f"  Hallucination rate: {scores.get('hallucination_rate', '?'):>6}")
-    print(f"  Tool enforcement:   {scores.get('tool_enforcement_pass', '?')}")
-    print(f"  Avg response:       {scores.get('avg_response_ms', '?')}ms")
+def format_summary(scores: dict) -> str:
+    lines = []
+    lines.append(f"\n  {'=' * 60}")
+    lines.append(f"  SUMMARY")
+    lines.append(f"  {'=' * 60}")
+    lines.append(f"  Tool accuracy:      {scores.get('tool_accuracy', '?'):>6}")
+    lines.append(f"  Grounding rate:     {scores.get('grounding_rate', '?'):>6}")
+    lines.append(f"  Hallucination rate: {scores.get('hallucination_rate', '?'):>6}")
+    lines.append(f"  Tool enforcement:   {scores.get('tool_enforcement_pass', '?')}")
+    lines.append(f"  Avg response:       {scores.get('avg_response_ms', '?')}ms")
     if scores.get("write_gate_rate") is not None:
-        print(f"  Write gate rate:    {scores['write_gate_rate']:.0%}")
-        print(f"  Write confirm rate: {scores['write_confirm_rate']:.0%}")
-        print(f"  Content match rate: {scores['content_match_rate']:.0%}")
-    print(f"  Model:     {scores.get('model', '?')}")
-    print(f"  Vault:     {scores.get('vault_type', '?')}")
-    print(f"  Host:      {scores.get('inference_host', '?')}")
-    print(f"  Date:      {scores.get('date', '?')}")
-    print()
+        lines.append(f"  Write gate rate:    {scores['write_gate_rate']:.0%}")
+        lines.append(f"  Write confirm rate: {scores['write_confirm_rate']:.0%}")
+        lines.append(f"  Content match rate: {scores['content_match_rate']:.0%}")
+    lines.append(f"  Model:     {scores.get('model', '?')}")
+    lines.append(f"  Vault:     {scores.get('vault_type', '?')}")
+    lines.append(f"  Host:      {scores.get('inference_host', '?')}")
+    lines.append(f"  Date:      {scores.get('date', '?')}")
+    return "\n".join(lines)
 
 
 def main():
@@ -134,10 +135,14 @@ def main():
     parser.add_argument("result", nargs="?", help="Result YAML file (default: latest in features/testing/results/)")
     parser.add_argument("--prompts", default=None, help="Prompts battery YAML (default: auto-detect)")
     parser.add_argument("--results-dir", default=None, help="Results directory (default: features/testing/results/)")
+    parser.add_argument("--output", "-o", default=None, help="Output file path")
+    parser.add_argument("--auto", action="store_true", help="Auto-name output file next to result (result.yaml → result.txt)")
     args = parser.parse_args()
 
     repo_root = Path(__file__).parent.parent.parent
     results_dir = Path(args.results_dir) if args.results_dir else repo_root / "features" / "testing" / "results"
+
+    out: list[str] = []
 
     if args.result:
         result_path = Path(args.result)
@@ -151,7 +156,7 @@ def main():
         if not all_results:
             sys.exit("No result files found.")
         result_path = all_results[0]
-        print(f"  Using latest result: {result_path}\n")
+        out.append(f"  Using latest result: {result_path}\n")
 
     result_data = load(result_path)
     if not isinstance(result_data, dict):
@@ -189,27 +194,40 @@ def main():
         prompts = load(prompts_path)
         if isinstance(prompts, list):
             prompt_map = build_prompt_map(prompts)
-        print(f"  Using prompts battery: {prompts_path}\n")
+        out.append(f"  Using prompts battery: {prompts_path}\n")
     else:
-        print("  (no prompts file found — analysis limited to result data)\n")
+        out.append("  (no prompts file found — analysis limited to result data)\n")
 
     passed = 0
     failed = 0
     for pr in prompt_results:
         pid = pr["id"]
         prompt = prompt_map.get(pid, {})
-        lines = analyze_one(prompt, pr)
-        sys.stdout.write("\n".join(lines))
+        out.extend(analyze_one(prompt, pr))
         if pr.get("passed", False):
             passed += 1
         else:
             failed += 1
 
-    print(f"  {'=' * 60}")
-    print(f"  TOTAL: {passed} passed, {failed} failed ({passed + failed} prompts)")
-    print()
+    out.append(f"  {'=' * 60}")
+    out.append(f"  TOTAL: {passed} passed, {failed} failed ({passed + failed} prompts)")
+    out.append("")
 
-    print_summary(scores)
+    out.append(format_summary(scores))
+
+    text = "\n".join(out)
+
+    if args.auto:
+        stem = result_path.stem
+        out_path = result_path.with_name(f"{stem}.txt")
+    elif args.output:
+        out_path = Path(args.output)
+    else:
+        print(text)
+        return
+
+    out_path.write_text(text, encoding="utf-8")
+    print(f"  Written: {out_path}")
 
 
 if __name__ == "__main__":
