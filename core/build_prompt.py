@@ -164,13 +164,27 @@ def build_prompt(vault_path: str | Path) -> tuple[str, dict]:
             + skill_index
         )
 
+    # 5 — Tool use rules (always appended, not vault-content-dependent)
+    sections.append(
+        "# Tool Use Rules\n\n"
+        "1. After calling a tool, always synthesize the results into a natural "
+        "language response. Do not output raw tool JSON.\n"
+        "2. If a tool returns zero results, an error, or a file-not-found, "
+        "say so directly. Do not fabricate answers from empty results.\n"
+        "3. If you are uncertain whether information exists in the vault, "
+        "search first. If search returns nothing, say you couldn't find it "
+        "rather than making something up.\n"
+        "4. The append_to_file and replace_lines tools require user "
+        "confirmation before executing. Propose the change and wait.\n"
+    )
+
     prompt = "\n\n---\n\n".join(sections)
     stats = {"memory_files_loaded": memory_count, "skills_in_index": skill_count}
     return prompt, stats
 
 
 if __name__ == "__main__":
-    vault = sys.argv[1] if len(sys.argv) > 1 else str(Path.home() / "Documents/Obsidian/Marlin")
+    vault = sys.argv[1] if len(sys.argv) > 1 else str(Path.home() / "Documents" / "vault")
     prompt, stats = build_prompt(vault)
     print(prompt)
     print(f"\n[stats: {stats}]", file=__import__("sys").stderr)

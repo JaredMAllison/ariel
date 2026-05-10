@@ -8,7 +8,7 @@ from pathlib import Path
 _DEFAULT_CONFIG_PATH = Path(__file__).parent / "operator" / "config.yaml"
 
 DEFAULTS = {
-    "vault_path": str(Path.home() / "Documents/Obsidian/Marlin"),
+    "vault_path": str(Path.home() / "Documents" / "vault"),
     "model": "qwen2.5:1.5b",
     "port": 8742,
     "num_ctx": 8192,

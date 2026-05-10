@@ -13,9 +13,6 @@ UNCERTAINTY_PHRASES = [
     "i have no", "there is no", "there are no", "there isn't", "there was no",
     "i cannot find", "did not contain", "does not contain", "unable to find",
     "there was an issue", "issue locating", "we don't", "we couldn't",
-    "not referenced", "not directly referenced", "no information", "no record",
-    "not present", "isn't mentioned", "is not mentioned", "no mention of",
-    "not in the vault", "not in your vault",
 ]
 
 

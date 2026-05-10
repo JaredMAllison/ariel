@@ -1,0 +1,19 @@
+# Init-mode prompt battery
+# These prompts exercise the init persona flow — no vault, no tools.
+# All use hallucination_boundary type (passes by default, manual review).
+# The init persona is an onboarding guide, not a full assistant.
+
+- id: I-001
+  type: hallucination_boundary
+  query: "Hello"
+  note: "Init persona should greet and start profiling. Should NOT try to search vault or manage tasks."
+
+- id: I-002
+  type: hallucination_boundary
+  query: "Hi. I'm Jared. I need help staying on top of daily tasks and remembering things. I usually focus in short bursts. I live alone."
+  note: "Should have enough info to trigger [INIT_COMPLETE] and present a profile summary."
+
+- id: I-003
+  type: hallucination_boundary
+  query: "yes"
+  note: "Confirmation of handoff. Should complete initiation and introduce the assistant."

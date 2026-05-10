@@ -451,12 +451,35 @@ function ThinkingRow() {
   );
 }
 
-function MessageRow({ msg }) {
+function ProposalBlock({ proposal, onConfirm, onDecline }) {
+  return (
+    <div style={{ marginTop: 14, borderTop: "0.5px solid var(--tan-dim)", paddingTop: 12 }}>
+      <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--tan)", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 8 }}>Proposed file</div>
+      <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--ink-3)", marginBottom: 6, wordBreak: "break-all" }}>{proposal.path}</div>
+      <pre style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, lineHeight: 1.45, background: "var(--bg)", border: "0.5px solid var(--line-soft)", borderRadius: 6, padding: 10, maxHeight: 240, overflow: "auto", whiteSpace: "pre-wrap", wordBreak: "break-word", color: "var(--ink-2)", margin: 0 }}>{proposal.content}</pre>
+      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+        <button onClick={onConfirm} style={{ flex: 1, padding: "7px 0", background: "var(--tan)", color: "var(--bg)", border: 0, borderRadius: 6, fontWeight: 600, fontSize: 12.5, cursor: "pointer", letterSpacing: "0.03em" }}>Write foundation</button>
+        <button onClick={onDecline} style={{ flex: 1, padding: "7px 0", background: "var(--bg-2)", color: "var(--ink-3)", border: "0.5px solid var(--line)", borderRadius: 6, fontWeight: 500, fontSize: 12.5, cursor: "pointer", letterSpacing: "0.03em" }}>Decline</button>
+      </div>
+    </div>
+  );
+}
+
+function MessageRow({ msg, onSend }) {
   const mine = msg.role === "user";
   return (
     <div style={cStyles.msgRow(mine)}>
       <div style={cStyles.msgMeta(mine)}>{mine ? "you" : "Ariel"}</div>
-      <div style={cStyles.bubble(mine)}>{msg.text}</div>
+      <div style={cStyles.bubble(mine)}>
+        <div>{msg.text}</div>
+        {msg.proposal && (
+          <ProposalBlock
+            proposal={msg.proposal}
+            onConfirm={() => onSend("yes")}
+            onDecline={() => onSend("no")}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -531,7 +554,7 @@ function ChatPanel({ messages, thinking, onSend, onReset, status, error }) {
 
       <div ref={scrollRef} style={cStyles.scroll}>
         <div style={cStyles.list}>
-          {messages.map((m, i) => <MessageRow key={i} msg={m} />)}
+          {messages.map((m, i) => <MessageRow key={i} msg={m} onSend={onSend} />)}
           {thinking && <ThinkingRow />}
         </div>
       </div>
@@ -694,7 +717,7 @@ function App() {
         setStatus(s => ({ ...s, inference_in_progress: false }));
         return;
       }
-      setMessages(m => [...m, { role: "ariel", text: data.response }]);
+      setMessages(m => [...m, { role: "ariel", text: data.response, proposal: data.proposal }]);
       setStatus(s => ({ ...s, inference_in_progress: false, history_turns: s.history_turns + 1 }));
     } catch {
       setError("Network error — orchestrator unreachable");

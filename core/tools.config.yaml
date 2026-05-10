@@ -1,35 +1,54 @@
-# Ariel von Marlin — tool manifest
-# Write tools gate on operator confirmation per ADR-006.
-# allow_external_writes in config.yaml controls path policy per ADR-007.
+# LMF assistant — tool manifest
+# Tool descriptions follow the principle: precise purpose + decision boundary +
+# negative guidance (when NOT to call). Overlapping tools (outline/read_section)
+# must make the split obvious so the model selects correctly.
 
 tools:
   search_vault:
     enabled: true
-    description: "BM25 ranked full-text search — use to find notes by topic, concept, or keyword"
+    description: >
+      Full-text BM25 ranked search across all vault notes. Returns results with
+      snippets, paths, and relevance scores. The primary discovery tool when
+      you don't know the exact file path. Do NOT use for reading known content
+      (use read_section or read_lines) or for finding heading structure
+      (use outline).
   read_section:
     enabled: true
-    description: "Read a named heading section from a vault note"
+    description: >
+      Read content under a specific named heading from a vault note. Uses
+      substring heading matching. Returns the full section body plus heading
+      breadcrumb. Do NOT use for getting a list of headings or an outline —
+      call outline for that. Do NOT use for raw line ranges — call
+      read_lines for that.
   read_lines:
     enabled: true
-    description: "Read a specific line range from a vault note"
+    description: >
+      Read a 1-indexed line range from a vault note. Returns raw lines with
+      no structure parsing. Use when you know the exact file and line numbers.
+      Do NOT use for reading by heading name — call read_section for that.
   outline:
     enabled: true
-    description: "Get the heading structure of a vault note"
+    description: >
+      Get the complete heading hierarchy of a vault note. Returns all headings
+      in order with level numbers and line positions. Call this FIRST when the
+      user asks about structure, sections, headings, organization, or layout
+      of a note. This is the ONLY tool that returns a full heading tree.
   grep_vault:
     enabled: true
-    description: "Regex search across all vault files — use to find notes by frontmatter fields (e.g. status: queued, tags), exact strings, or structural patterns"
+    description: >
+      Regex search across all vault .md files. Returns matching lines with
+      file paths and line numbers. Case-insensitive by default. Use for
+      finding specific strings or cross-references. Do NOT use for semantic
+      ranked search — call search_vault for that.
+  append_to_file:
+    enabled: false
+    description: "Append content to a vault note (write — disabled pending access model)"
+  replace_lines:
+    enabled: false
+    description: "Replace lines in a vault note (write — disabled pending access model)"
   list_files:
     enabled: true
-    description: "List all markdown files with sizes — use only to browse vault structure, not to find notes by content or status"
-  append_to_file:
-    enabled: true
-    description: "Append content to a vault note — call this tool directly; operator confirmation is handled automatically by the system"
-  replace_lines:
-    enabled: true
-    description: "Replace lines in a vault note — call this tool directly; operator confirmation is handled automatically by the system"
-  insert_after_heading:
-    enabled: true
-    description: "Insert content after a heading in a vault note — call this tool directly; operator confirmation is handled automatically by the system"
-  create_file:
-    enabled: true
-    description: "Create a new vault note — call this tool directly; operator confirmation is handled automatically by the system"
+    description: >
+      List all markdown files in the vault with line counts and file sizes.
+      Use to discover what notes exist or to find the correct file path for
+      other tools.

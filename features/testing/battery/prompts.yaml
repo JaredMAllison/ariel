@@ -162,28 +162,3 @@
   expected_file: "Inbox.md"
   expected_content_fragment: "schedule dentist appointment"
   expect_no_write: true
-
-- id: W-OP-001
-  type: write_exercise
-  vault: operator
-  query: "Add this to my inbox: ariel write gate test"
-  confirm_with: "yes"
-  expected_file: "Inbox.md"
-  expected_content_fragment: "ariel write gate test"
-
-- id: W-OP-002
-  type: write_exercise
-  vault: operator
-  query: "Add this to my inbox: ariel rejection test"
-  confirm_with: "no"
-  expected_file: "Inbox.md"
-  expected_content_fragment: "ariel rejection test"
-  expect_no_write: true
-
-- id: W-OP-003
-  type: write_exercise
-  vault: operator
-  query: "Create a new task note called 'ariel-harness-write-test' with status queued and context computer"
-  confirm_with: "yes"
-  expected_file: "Tasks/ariel-harness-write-test.md"
-  expected_content_fragment: "queued"

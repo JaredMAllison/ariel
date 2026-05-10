@@ -1,6 +1,9 @@
 operator/config.yaml
+operator/.init_state.json
+operator/deploy.yaml
 features/testing/results/operator/
 features/testing/synthetic/vault/
 __pycache__/
 *.pyc
 .pytest_cache/
+.worktrees/
