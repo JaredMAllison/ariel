@@ -843,7 +843,8 @@ class Handler(BaseHTTPRequestHandler):
 
 def run(vault_path: str):
     _init_config()
-    orch = Orchestrator(vault_path)
+    from .ariel.persona import ArielOrchestrator
+    orch = ArielOrchestrator(vault_path)
     Handler.orchestrator = orch
     server = HTTPServer((HOST, PORT), Handler)
     try:
