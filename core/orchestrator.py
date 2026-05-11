@@ -16,6 +16,7 @@ from lmf.orchestrator import (  # noqa: F401  re-exported for test compat
     run_with,
     is_confirmation,
     _WRITE_TOOLS,
+    _format_proposal,
     load_config,
     load_deploy_config,
     _init_config,

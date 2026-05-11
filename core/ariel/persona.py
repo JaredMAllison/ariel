@@ -5,14 +5,14 @@ from .guard import ArielGuard
 from .memory import ArielMemory
 from .thinking import ArielThinking
 from .session_yaml import SessionYAMLHandler
-from ..orchestrator import Orchestrator
+from lmf.orchestrator import Orchestrator
 
 class ArielOrchestrator(Orchestrator):
     """Ariel‑specific orchestrator implementing Think‑Read‑Respond.
     Integrates Knowledge Loom for targeted vault retrieval.
     """
-    def __init__(self, vault_path: str, test_mode: bool = False):
-        super().__init__(vault_path, test_mode)
+    def __init__(self, vault_path: str, test_mode: bool = False, tools_config_path=None):
+        super().__init__(vault_path, test_mode, tools_config_path=tools_config_path)
         self.guard = ArielGuard()
         self.memory = ArielMemory(vault_path, self.loom_url)
         self.thinker = ArielThinking()
