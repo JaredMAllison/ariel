@@ -39,3 +39,20 @@ class MockBackend:
 
     def await_decision(self) -> Decision:
         return self._decision
+
+
+class WriteGate:
+    def __init__(self, backend: ApprovalBackend):
+        self.backend = backend
+
+    def propose(self, proposals: list[WriteProposal]) -> GateResult:
+        raise NotImplementedError
+
+    def _apply_decision(self, proposals: list[WriteProposal], decision: Decision) -> GateResult:
+        if decision.verdict == "all":
+            return GateResult(approved=list(proposals), rejected=[])
+        if decision.verdict == "none":
+            return GateResult(approved=[], rejected=list(proposals))
+        approved = [p for i, p in enumerate(proposals) if i in decision.approved_indices]
+        rejected = [p for i, p in enumerate(proposals) if i not in decision.approved_indices]
+        return GateResult(approved=approved, rejected=rejected)

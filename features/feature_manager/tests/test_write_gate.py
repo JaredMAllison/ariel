@@ -4,6 +4,7 @@ from features.write_gate import (
     GateResult,
     ApprovalBackend,
     MockBackend,
+    WriteGate,
 )
 
 
@@ -67,3 +68,45 @@ def test_mock_backend_presented_none_before_present():
     decision = Decision(verdict="all", approved_indices=[])
     backend = MockBackend(decision)
     assert backend.presented is None
+
+
+def _three_proposals():
+    return [
+        WriteProposal("a.md", "A", "create", "Create a.md"),
+        WriteProposal("b.md", "B", "update", "Update b.md"),
+        WriteProposal("c.md", "C", "delete", "Delete c.md"),
+    ]
+
+
+def test_apply_decision_all():
+    gate = WriteGate(backend=MockBackend(Decision(verdict="all")))
+    proposals = _three_proposals()
+    result = gate._apply_decision(proposals, Decision(verdict="all"))
+    assert result.approved == proposals
+    assert result.rejected == []
+
+
+def test_apply_decision_none():
+    gate = WriteGate(backend=MockBackend(Decision(verdict="none")))
+    proposals = _three_proposals()
+    result = gate._apply_decision(proposals, Decision(verdict="none"))
+    assert result.approved == []
+    assert result.rejected == proposals
+
+
+def test_apply_decision_partial():
+    gate = WriteGate(backend=MockBackend(Decision(verdict="all")))
+    proposals = _three_proposals()
+    result = gate._apply_decision(proposals, Decision(verdict="partial", approved_indices=[0, 2]))
+    assert result.approved == [proposals[0], proposals[2]]
+    assert result.rejected == [proposals[1]]
+
+
+def test_apply_decision_approved_and_rejected_are_exhaustive():
+    gate = WriteGate(backend=MockBackend(Decision(verdict="all")))
+    proposals = _three_proposals()
+    result = gate._apply_decision(proposals, Decision(verdict="partial", approved_indices=[1]))
+    # approved + rejected must account for every proposal exactly once
+    assert len(result.approved) + len(result.rejected) == len(proposals)
+    assert result.approved == [proposals[1]]
+    assert result.rejected == [proposals[0], proposals[2]]
