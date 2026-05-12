@@ -110,3 +110,57 @@ def test_apply_decision_approved_and_rejected_are_exhaustive():
     assert len(result.approved) + len(result.rejected) == len(proposals)
     assert result.approved == [proposals[1]]
     assert result.rejected == [proposals[0], proposals[2]]
+
+
+def test_propose_empty_list_returns_empty_without_calling_backend():
+    backend = MockBackend(Decision(verdict="all"))
+    gate = WriteGate(backend)
+    result = gate.propose([])
+    assert result.approved == []
+    assert result.rejected == []
+    assert backend.presented is None  # present() was never called
+
+
+def test_propose_all_approved():
+    proposals = _three_proposals()
+    backend = MockBackend(Decision(verdict="all"))
+    gate = WriteGate(backend)
+    result = gate.propose(proposals)
+    assert result.approved == proposals
+    assert result.rejected == []
+    assert backend.presented == proposals  # present() was called
+
+
+def test_propose_all_rejected():
+    proposals = _three_proposals()
+    backend = MockBackend(Decision(verdict="none"))
+    gate = WriteGate(backend)
+    result = gate.propose(proposals)
+    assert result.approved == []
+    assert result.rejected == proposals
+
+
+def test_propose_partial_approval():
+    proposals = _three_proposals()
+    backend = MockBackend(Decision(verdict="partial", approved_indices=[0, 2]))
+    gate = WriteGate(backend)
+    result = gate.propose(proposals)
+    assert result.approved == [proposals[0], proposals[2]]
+    assert result.rejected == [proposals[1]]
+
+
+def test_propose_calls_present_then_await_decision():
+    """present() is called before await_decision() — confirmed via call-order tracking."""
+    proposals = _three_proposals()
+    call_order = []
+
+    class TrackingBackend:
+        def present(self, p):
+            call_order.append("present")
+        def await_decision(self):
+            call_order.append("await_decision")
+            return Decision(verdict="all")
+
+    gate = WriteGate(TrackingBackend())
+    gate.propose(proposals)
+    assert call_order == ["present", "await_decision"]

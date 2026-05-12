@@ -46,7 +46,11 @@ class WriteGate:
         self.backend = backend
 
     def propose(self, proposals: list[WriteProposal]) -> GateResult:
-        raise NotImplementedError
+        if not proposals:
+            return GateResult(approved=[], rejected=[])
+        self.backend.present(proposals)
+        decision = self.backend.await_decision()
+        return self._apply_decision(proposals, decision)
 
     def _apply_decision(self, proposals: list[WriteProposal], decision: Decision) -> GateResult:
         if decision.verdict == "all":
