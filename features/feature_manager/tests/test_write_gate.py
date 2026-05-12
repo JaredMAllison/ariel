@@ -207,3 +207,90 @@ def test_stdio_present_stores_proposals_for_await():
     proposals = _three_proposals()
     backend.present(proposals)
     assert backend._proposals == proposals
+
+
+def _stdio_with_inputs(*responses):
+    """Return a StdioBackend that reads from the given response sequence."""
+    it = iter(responses)
+    lines = []
+    def fake_output(text=""):
+        lines.append(text)
+    return StdioBackend(input_fn=lambda _: next(it), output_fn=fake_output), lines
+
+
+def test_stdio_await_yes():
+    backend, _ = _stdio_with_inputs("yes")
+    backend.present(_three_proposals())
+    d = backend.await_decision()
+    assert d.verdict == "all"
+    assert d.approved_indices == []
+
+
+def test_stdio_await_all():
+    backend, _ = _stdio_with_inputs("all")
+    backend.present(_three_proposals())
+    d = backend.await_decision()
+    assert d.verdict == "all"
+
+
+def test_stdio_await_no():
+    backend, _ = _stdio_with_inputs("no")
+    backend.present(_three_proposals())
+    d = backend.await_decision()
+    assert d.verdict == "none"
+    assert d.approved_indices == []
+
+
+def test_stdio_await_cancel():
+    backend, _ = _stdio_with_inputs("cancel")
+    backend.present(_three_proposals())
+    d = backend.await_decision()
+    assert d.verdict == "none"
+
+
+def test_stdio_await_indices():
+    backend, _ = _stdio_with_inputs("1 3")
+    backend.present(_three_proposals())
+    d = backend.await_decision()
+    assert d.verdict == "partial"
+    assert d.approved_indices == [0, 2]  # 1-based input → 0-based indices
+
+
+def test_stdio_await_single_index():
+    backend, _ = _stdio_with_inputs("2")
+    backend.present(_three_proposals())
+    d = backend.await_decision()
+    assert d.verdict == "partial"
+    assert d.approved_indices == [1]
+
+
+def test_stdio_await_skip():
+    backend, _ = _stdio_with_inputs("skip 2")
+    backend.present(_three_proposals())  # 3 proposals: indices 0,1,2
+    d = backend.await_decision()
+    assert d.verdict == "partial"
+    assert d.approved_indices == [0, 2]  # skip 1-based "2" → skip 0-based 1
+
+
+def test_stdio_await_skip_multiple():
+    backend, _ = _stdio_with_inputs("skip 1 3")
+    backend.present(_three_proposals())  # 3 proposals
+    d = backend.await_decision()
+    assert d.verdict == "partial"
+    assert d.approved_indices == [1]  # skip 0-based 0 and 2
+
+
+def test_stdio_await_malformed_then_valid():
+    """Invalid input re-prompts; second valid input returns a decision."""
+    backend, output_lines = _stdio_with_inputs("garbage", "yes")
+    backend.present(_three_proposals())
+    d = backend.await_decision()
+    assert d.verdict == "all"
+    assert any("Invalid" in line for line in output_lines)
+
+
+def test_stdio_await_case_insensitive():
+    backend, _ = _stdio_with_inputs("YES")
+    backend.present(_three_proposals())
+    d = backend.await_decision()
+    assert d.verdict == "all"

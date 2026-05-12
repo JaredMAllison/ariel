@@ -56,7 +56,24 @@ class StdioBackend:
         self._output("")
 
     def await_decision(self) -> Decision:
-        raise NotImplementedError
+        n = len(self._proposals)
+        while True:
+            raw = self._input("Approve? [yes/no/1 3 5/skip 2]: ").strip().lower()
+            if raw in ("yes", "all"):
+                return Decision(verdict="all", approved_indices=[])
+            if raw in ("no", "cancel"):
+                return Decision(verdict="none", approved_indices=[])
+            if raw.startswith("skip "):
+                parts = raw[5:].split()
+                if all(p.isdigit() for p in parts):
+                    skip_0based = {int(p) - 1 for p in parts}
+                    approved = [i for i in range(n) if i not in skip_0based]
+                    return Decision(verdict="partial", approved_indices=approved)
+            parts = raw.split()
+            if parts and all(p.isdigit() for p in parts):
+                approved = [int(p) - 1 for p in parts]
+                return Decision(verdict="partial", approved_indices=approved)
+            self._output("  Invalid input. Enter: yes / no / 1 3 5 / skip 2 4")
 
 
 class WriteGate:
