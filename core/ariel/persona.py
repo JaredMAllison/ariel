@@ -137,15 +137,21 @@ User message: {sanitized_input}"""
         thinking_response = self._call_backend(thinking_prompt, timeout, prefer_backend="groq")
         thought, tool_calls = self.thinker.extract_thoughts_and_tools(thinking_response)
 
-        # === 3. Read (kb_core for search, base dispatch for I/O tools) ===
+        # === 3. Read (kb_core for search, base dispatch for I/O tools) with retry loop ===
+        MAX_RETRIEVAL_ROUNDS = 3
         vault_context_parts = []
-        if tool_calls:
-            for tc in tool_calls:
+        remaining_calls = list(tool_calls) if tool_calls else []
+        rounds = 0
+
+        while remaining_calls and rounds < MAX_RETRIEVAL_ROUNDS:
+            rounds += 1
+            before_len = len(vault_context_parts)
+
+            for tc in remaining_calls:
                 tool_name = tc["name"]
                 tool_args = tc["args"]
                 try:
                     if tool_name == "search_vault":
-                        # kb_core replaces Loom for BM25 search
                         query = tool_args[0] if len(tool_args) >= 1 else ""
                         top_k = int(tool_args[1]) if len(tool_args) >= 2 and str(tool_args[1]).isdigit() else 5
                         results = self.kb.search(query, top_k=top_k)
@@ -198,13 +204,29 @@ User message: {sanitized_input}"""
                         else:
                             vault_context_parts.append(str(result))
                     elif isinstance(result, list):
-                        # e.g. list_files returns a list
                         vault_context_parts.append(str(result))
                     else:
                         vault_context_parts.append(str(result))
                 except Exception as e:
                     logging.error(f"Tool {tool_name} failed: {e}")
                     vault_context_parts.append(f"[Error calling {tool_name}: {e}]")
+
+            # Quality check: did this round produce any non-error content?
+            new_parts = vault_context_parts[before_len:]
+            useful = [p for p in new_parts if not p.startswith("[Error")]
+            if useful:
+                break  # Got useful results — done
+
+            # Thin/no results — ask Think to try a different approach
+            if rounds < MAX_RETRIEVAL_ROUNDS:
+                retry_prompt = f"""Your previous retrieval returned no useful results.
+        Original query: {sanitized_input}
+        Tools tried: {[tc['name'] for tc in remaining_calls]}
+        Try different search terms or a different tool. Output new Tool: calls only."""
+                retry_response = self._call_backend(retry_prompt, timeout, prefer_backend="groq")
+                _, remaining_calls = self.thinker.extract_thoughts_and_tools(retry_response)
+                if not remaining_calls:
+                    break
         vault_context = "\n\n---\n\n".join(vault_context_parts) if vault_context_parts else ""
 
         # === 4. Respond (grounded) ===
