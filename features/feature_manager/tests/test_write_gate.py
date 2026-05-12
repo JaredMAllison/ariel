@@ -5,6 +5,7 @@ from features.write_gate import (
     ApprovalBackend,
     MockBackend,
     WriteGate,
+    StdioBackend,
 )
 
 
@@ -164,3 +165,45 @@ def test_propose_calls_present_then_await_decision():
     gate = WriteGate(TrackingBackend())
     gate.propose(proposals)
     assert call_order == ["present", "await_decision"]
+
+
+def test_stdio_present_outputs_proposal_count(capsys):
+    backend = StdioBackend()
+    backend.present(_three_proposals())
+    captured = capsys.readouterr()
+    assert "3" in captured.out
+
+
+def test_stdio_present_outputs_all_paths(capsys):
+    backend = StdioBackend()
+    proposals = _three_proposals()
+    backend.present(proposals)
+    captured = capsys.readouterr()
+    for p in proposals:
+        assert p.path in captured.out
+
+
+def test_stdio_present_outputs_all_descriptions(capsys):
+    backend = StdioBackend()
+    proposals = _three_proposals()
+    backend.present(proposals)
+    captured = capsys.readouterr()
+    for p in proposals:
+        assert p.description in captured.out
+
+
+def test_stdio_present_outputs_1based_numbering(capsys):
+    backend = StdioBackend()
+    backend.present(_three_proposals())
+    captured = capsys.readouterr()
+    assert "[1]" in captured.out
+    assert "[2]" in captured.out
+    assert "[3]" in captured.out
+    assert "[0]" not in captured.out
+
+
+def test_stdio_present_stores_proposals_for_await():
+    backend = StdioBackend()
+    proposals = _three_proposals()
+    backend.present(proposals)
+    assert backend._proposals == proposals

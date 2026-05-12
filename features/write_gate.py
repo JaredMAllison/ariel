@@ -41,6 +41,24 @@ class MockBackend:
         return self._decision
 
 
+class StdioBackend:
+    def __init__(self, input_fn=None, output_fn=None):
+        self._input = input_fn if input_fn is not None else input
+        self._output = output_fn if output_fn is not None else print
+        self._proposals: list[WriteProposal] = []
+
+    def present(self, proposals: list[WriteProposal]) -> None:
+        self._proposals = proposals
+        self._output(f"\nProposed writes ({len(proposals)}):\n")
+        for i, p in enumerate(proposals, 1):
+            self._output(f"  [{i}] {p.operation:<8}  {p.path}")
+            self._output(f"       {p.description}")
+        self._output("")
+
+    def await_decision(self) -> Decision:
+        raise NotImplementedError
+
+
 class WriteGate:
     def __init__(self, backend: ApprovalBackend):
         self.backend = backend
