@@ -5,8 +5,9 @@ from .guard import ArielGuard
 from .memory import ArielMemory
 from .thinking import ArielThinking
 from .session_yaml import SessionYAMLHandler
+from .write_intent import WriteIntentParser
 from kb_core import KnowledgeBase
-from lmf.orchestrator import Orchestrator
+from lmf.orchestrator import Orchestrator, is_confirmation, _format_proposal
 
 class ArielOrchestrator(Orchestrator):
     """Ariel‑specific orchestrator implementing Think‑Read‑Respond.
@@ -22,6 +23,7 @@ class ArielOrchestrator(Orchestrator):
 
         # Initialize kb_core for vault search (replaces Loom dependency)
         self.kb = KnowledgeBase(Path(vault_path))
+        self._write_parser = WriteIntentParser()
         logging.info(f"[Ariel] kb_core initialized — {len(self.kb.chunks)} chunks indexed")
 
         # Prepend session context (if any) to the system prompt
@@ -103,6 +105,27 @@ class ArielOrchestrator(Orchestrator):
                 self.memory.pending_insight = None
                 self.memory.pending_session_updates = None
                 return "✅ Insight creation declined."
+
+        # === Pending Write Confirmation ===
+        if self.pending_write:
+            if is_confirmation(user_message):
+                name = self.pending_write["name"]
+                args = self.pending_write["args"]
+                self.pending_write = None
+                raw = self._dispatch_tool(name, args)
+                if self.verbose_writes or self.test_mode:
+                    return f"Done. ✓ Written to `{args.get('file_path', 'file')}`"
+                return f"Done. {raw}"
+            else:
+                self.pending_write = None
+                return "Okay, I won't make that change."
+
+        # === Write Intent Detection ===
+        intent = self._write_parser.parse(user_message)
+        if intent:
+            proposal = _format_proposal(intent.tool, intent.args)
+            self.pending_write = {"name": intent.tool, "args": intent.args, "proposal": proposal}
+            return proposal
 
         # === 1. Sanitize & Warn ===
         sanitized_input, warning_detected = self.guard.sanitize(user_message)
