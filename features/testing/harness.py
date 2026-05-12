@@ -89,6 +89,7 @@ def _run_write_exercise(orch: Orchestrator, prompt: dict,
         "gate_held":       gate_held,
         "write_confirmed": write_confirmed,
         "content_match":   content_match,
+        "expect_no_write": expect_no_write,
     }
 
 
