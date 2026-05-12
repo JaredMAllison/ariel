@@ -41,6 +41,29 @@ class MockBackend:
         return self._decision
 
 
+class CockpitBackend:
+    """
+    Approval backend routing proposals to Cockpit subscreen 3.
+    Not yet wired — raises NotImplementedError until the Cockpit
+    write-gate webhook endpoint is implemented.
+    """
+    def __init__(self, base_url: str):
+        self.base_url = base_url
+
+    def present(self, proposals: list[WriteProposal]) -> None:
+        raise NotImplementedError(
+            "CockpitBackend not yet wired. "
+            "Subscreen 3 webhook endpoint (/api/write-gate/propose) is pending. "
+            "Use StdioBackend or MockBackend until Cockpit wiring is complete."
+        )
+
+    def await_decision(self) -> Decision:
+        raise NotImplementedError(
+            "CockpitBackend not yet wired. "
+            "Use StdioBackend or MockBackend until Cockpit wiring is complete."
+        )
+
+
 class StdioBackend:
     def __init__(self, input_fn=None, output_fn=None):
         self._input = input_fn if input_fn is not None else input

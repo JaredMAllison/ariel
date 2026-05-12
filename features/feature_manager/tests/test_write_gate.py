@@ -1,3 +1,5 @@
+import pytest
+
 from features.write_gate import (
     WriteProposal,
     Decision,
@@ -6,6 +8,7 @@ from features.write_gate import (
     MockBackend,
     WriteGate,
     StdioBackend,
+    CockpitBackend,
 )
 
 
@@ -294,3 +297,21 @@ def test_stdio_await_case_insensitive():
     backend.present(_three_proposals())
     d = backend.await_decision()
     assert d.verdict == "all"
+
+
+def test_cockpit_backend_present_raises_not_implemented():
+    backend = CockpitBackend(base_url="http://localhost:7832")
+    with pytest.raises(NotImplementedError) as exc_info:
+        backend.present(_three_proposals())
+    assert "subscreen 3" in str(exc_info.value).lower() or "wired" in str(exc_info.value).lower()
+
+
+def test_cockpit_backend_await_decision_raises_not_implemented():
+    backend = CockpitBackend(base_url="http://localhost:7832")
+    with pytest.raises(NotImplementedError):
+        backend.await_decision()
+
+
+def test_cockpit_backend_stores_base_url():
+    backend = CockpitBackend(base_url="http://10.0.0.8:7832")
+    assert backend.base_url == "http://10.0.0.8:7832"
