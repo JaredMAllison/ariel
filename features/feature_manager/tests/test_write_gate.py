@@ -3,6 +3,7 @@ from features.write_gate import (
     Decision,
     GateResult,
     ApprovalBackend,
+    MockBackend,
 )
 
 
@@ -40,3 +41,29 @@ def test_gate_result_fields():
     r = GateResult(approved=[p1], rejected=[p2])
     assert r.approved == [p1]
     assert r.rejected == [p2]
+
+
+def _make_proposal(path="Tasks/a.md", operation="create"):
+    return WriteProposal(path=path, content="# test\n", operation=operation, description=f"Test {path}")
+
+
+def test_mock_backend_records_present():
+    decision = Decision(verdict="all", approved_indices=[])
+    backend = MockBackend(decision)
+    proposals = [_make_proposal()]
+    backend.present(proposals)
+    assert backend.presented == proposals
+
+
+def test_mock_backend_returns_preset_decision():
+    decision = Decision(verdict="none", approved_indices=[])
+    backend = MockBackend(decision)
+    backend.present([_make_proposal()])
+    result = backend.await_decision()
+    assert result is decision
+
+
+def test_mock_backend_presented_none_before_present():
+    decision = Decision(verdict="all", approved_indices=[])
+    backend = MockBackend(decision)
+    assert backend.presented is None

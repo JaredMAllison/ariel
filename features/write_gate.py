@@ -27,3 +27,15 @@ class GateResult:
 class ApprovalBackend(Protocol):
     def present(self, proposals: list[WriteProposal]) -> None: ...
     def await_decision(self) -> Decision: ...
+
+
+class MockBackend:
+    def __init__(self, decision: Decision):
+        self._decision = decision
+        self.presented: list[WriteProposal] | None = None
+
+    def present(self, proposals: list[WriteProposal]) -> None:
+        self.presented = proposals
+
+    def await_decision(self) -> Decision:
+        return self._decision
