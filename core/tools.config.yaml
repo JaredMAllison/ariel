@@ -41,11 +41,29 @@ tools:
       finding specific strings or cross-references. Do NOT use for semantic
       ranked search — call search_vault for that.
   append_to_file:
-    enabled: false
-    description: "Append content to a vault note (write — disabled pending access model)"
+    enabled: true
+    description: >
+      Append new content to the end of an existing vault note. Use for adding
+      a new entry, log line, or note body to a file that already exists. Do NOT
+      use to create a new file — call create_file for that. Do NOT use to insert
+      at a specific position — call insert_after_heading for that.
   replace_lines:
     enabled: false
     description: "Replace lines in a vault note (write — disabled pending access model)"
+  create_file:
+    enabled: true
+    description: >
+      Create a new vault note at a vault-relative path with full content.
+      Use when the operator asks to create, add, or capture a new note, task,
+      or file that does not yet exist. Do NOT use if the file already exists —
+      call append_to_file or replace_lines for existing files.
+  insert_after_heading:
+    enabled: true
+    description: >
+      Insert content immediately after a named heading in an existing vault note.
+      Uses substring heading matching. Use when adding structured content under
+      a specific section. Do NOT use if there is no heading to anchor to —
+      call append_to_file for unstructured appends.
   list_files:
     enabled: true
     description: >

@@ -72,6 +72,15 @@ def seed_vault(spec_path: Path, vault_path: Path) -> None:
             body=note["body"],
         )
 
+    # Required for non-init mode — orchestrator checks for this file
+    foundation = vault_path / "LOCAL_MIND_FOUNDATION.md"
+    if not foundation.exists():
+        foundation.write_text(
+            "---\ntitle: LOCAL_MIND_FOUNDATION\ntype: profile\ninstance_name: TestLMF\n"
+            "trust_profile: personal\ninit_date: 2026-01-01\n---\n",
+            encoding="utf-8",
+        )
+
 
 if __name__ == "__main__":
     import sys

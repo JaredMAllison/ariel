@@ -176,13 +176,16 @@ def main():
             vault_path = tmp_dir / "vault"
             print(f"  Snapshot ready. Original vault untouched.", flush=True)
 
+        tools_config = REPO_ROOT / "core" / "tools.config.yaml"
         for model in models:
             orch_module.OLLAMA_MODEL = model
             if args.orchestrator == "ariel":
                 from ariel.persona import ArielOrchestrator
-                orch = ArielOrchestrator(str(vault_path), test_mode=True)
+                orch = ArielOrchestrator(str(vault_path), test_mode=True,
+                                         tools_config_path=tools_config if tools_config.exists() else None)
             else:
-                orch = Orchestrator(str(vault_path), test_mode=True)
+                orch = Orchestrator(str(vault_path), test_mode=True,
+                                    tools_config_path=tools_config if tools_config.exists() else None)
             print(f"\nRunning battery — model={model} vault={vault_type} prompts={len(prompts)}")
 
             try:
