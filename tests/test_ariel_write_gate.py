@@ -160,3 +160,67 @@ def test_two_turn_rejected_write(ariel, vault):
     reply2 = ariel.chat("no")
     assert "won't" in reply2.lower() or "okay" in reply2.lower()
     assert (vault / "Inbox.md").read_text() == inbox_before
+
+
+# --- Capture flow integration ---
+
+def test_capture_flow_pronoun_triggers_state(ariel):
+    """'capture that' triggers capture flow state, returns prompt, no pending_write."""
+    reply = ariel.chat("capture that")
+    assert reply == "Task, project, or inbox?"
+    assert ariel._capture_pending is not None
+    assert ariel._capture_pending["content"] == "that"
+    assert ariel._capture_pending["target"] is None
+    # No pending write — capture flow doesn't set one
+    assert ariel.pending_write is None
+
+
+def test_capture_flow_left_leadin_triggers_state(ariel):
+    """'please capture that' with left library word."""
+    reply = ariel.chat("please capture that")
+    assert reply == "Task, project, or inbox?"
+    assert ariel._capture_pending is not None
+    assert ariel.pending_write is None
+
+
+def test_capture_flow_meaningful_content_triggers_state(ariel):
+    """'capture these notes' — content present, still sets capture state."""
+    reply = ariel.chat("capture these notes about conversational flow")
+    assert reply == "Task, project, or inbox?"
+    assert ariel._capture_pending is not None
+    assert ariel._capture_pending["content"] == "these notes about conversational flow"
+    assert ariel.pending_write is None
+
+
+def test_capture_flow_state_second_turn_inbox(ariel):
+    """Capture flow second turn: user says 'inbox' → writes with verification."""
+    ariel.chat("capture these notes")
+    assert ariel._capture_pending is not None
+    reply2 = ariel.chat("inbox")
+    assert "✓ Appended to Inbox.md" in reply2
+    assert ariel._capture_pending is None
+
+
+def test_capture_flow_does_not_block_write_intent(ariel):
+    """Specific write intents still work — capture flow only catches generic patterns."""
+    reply = ariel.chat("Add 'hello' to my inbox")
+    assert "Ariel wants to" in reply
+    assert ariel.pending_write is not None
+    ariel._call_backend_with_history.assert_not_called()
+
+
+def test_capture_flow_does_not_block_insight(ariel):
+    """'capture this as an insight' — still routes to write gate."""
+    reply = ariel.chat("Capture this as an insight")
+    assert "Ariel wants to" in reply
+    assert ariel.pending_write is not None
+    ariel._call_backend_with_history.assert_not_called()
+
+
+def test_capture_flow_inbox_pronoun_triggers_state(ariel):
+    """'capture that to inbox' — pronoun with inbox target, sets capture state."""
+    reply = ariel.chat("capture that to inbox")
+    assert reply == "Task, project, or inbox?"
+    assert ariel._capture_pending is not None
+    assert ariel._capture_pending["content"] == "that"
+    assert ariel.pending_write is None
