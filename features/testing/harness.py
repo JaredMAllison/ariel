@@ -89,6 +89,7 @@ def _run_write_exercise(orch: Orchestrator, prompt: dict,
         "gate_held":       gate_held,
         "write_confirmed": write_confirmed,
         "content_match":   content_match,
+        "expect_no_write": expect_no_write,
     }
 
 
@@ -112,6 +113,8 @@ def main():
                         help="Copy vault to a temp dir before running; delete after. Safe for live vaults.")
     parser.add_argument("--battery", default="prompts",
                         help="Prompt battery file stem in battery/ dir (default: prompts)")
+    parser.add_argument("--orchestrator", default="base", choices=["base", "ariel"],
+                        help="Orchestrator class to test: 'base' (default) or 'ariel'")
     args = parser.parse_args()
 
     config_path = REPO_ROOT / "operator" / "config.yaml"
@@ -175,7 +178,11 @@ def main():
 
         for model in models:
             orch_module.OLLAMA_MODEL = model
-            orch = Orchestrator(str(vault_path), test_mode=True)
+            if args.orchestrator == "ariel":
+                from ariel.persona import ArielOrchestrator
+                orch = ArielOrchestrator(str(vault_path), test_mode=True)
+            else:
+                orch = Orchestrator(str(vault_path), test_mode=True)
             print(f"\nRunning battery — model={model} vault={vault_type} prompts={len(prompts)}")
 
             try:

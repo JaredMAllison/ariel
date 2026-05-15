@@ -70,7 +70,7 @@ def write_results(scores: dict, results: list[dict], model: str,
                   gpu_accelerated: bool = False) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     today = date.today().isoformat()
-    slug = f"{today}-{model.replace(':', '-')}-{vault_type}"
+    slug = f"{today}-{model.replace(':', '-').replace('/', '-')}-{vault_type}"
     existing = [f.stem for f in output_dir.glob(f"{slug}-r*.yaml")]
     runs = [int(s.rsplit("-r", 1)[1]) for s in existing if s.rsplit("-r", 1)[-1].isdigit()]
     run_n = max(runs, default=0) + 1
@@ -123,6 +123,10 @@ def _prompt_passed(result: dict) -> bool:
     if t == "tool_enforcement":
         return not (DISABLED_TOOLS & set(result.get("tool_calls_made", [])))
     if t == "write_exercise":
+        if result.get("expect_no_write", False):
+            # Rejection exercise: gate must fire AND file must be unchanged
+            return (result.get("gate_held", False)
+                    and result.get("content_match", False))
         return (result.get("gate_held", False)
                 and result.get("write_confirmed", False)
                 and result.get("content_match", False))

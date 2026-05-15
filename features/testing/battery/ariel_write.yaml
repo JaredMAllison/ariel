@@ -1,0 +1,61 @@
+# ariel_write battery — write gate tests for ArielOrchestrator (pattern matching path)
+# All exercises use vault: operator — run with --orchestrator ariel --vault <path>
+# Each exercise: turn 1 triggers a proposal, turn 2 confirms or rejects
+
+# AW001 — inbox append via colon form
+- id: AW001
+  type: write_exercise
+  vault: operator
+  query: "Add this to my inbox: 'Ariel write gate battery run confirmed.'"
+  expected_file: "Inbox.md"
+  expected_content_fragment: "Ariel write gate battery run confirmed"
+  confirm_with: "yes"
+
+# AW002 — create task at explicit path with title
+- id: AW002
+  type: write_exercise
+  vault: operator
+  query: >
+    Create a new task note at Tasks/ariel-write-gate-test.md with title
+    'Ariel write gate test task'.
+  expected_file: "Tasks/ariel-write-gate-test.md"
+  expected_content_fragment: "Ariel write gate test task"
+  confirm_with: "yes"
+
+# AW003 — gate rejection via 'no'
+- id: AW003
+  type: write_exercise
+  vault: operator
+  query: "Add 'SHOULD NOT APPEAR' to my inbox."
+  expected_file: "Inbox.md"
+  expect_no_write: true
+  confirm_with: "no"
+
+# AW004 — gate rejection via unrelated message
+- id: AW004
+  type: write_exercise
+  vault: operator
+  query: "Append 'SHOULD NOT APPEAR EITHER' to my inbox."
+  expected_file: "Inbox.md"
+  expect_no_write: true
+  confirm_with: "actually never mind"
+
+# AW005 — append to explicit project file
+- id: AW005
+  type: write_exercise
+  vault: operator
+  query: "Append 'Ariel write gate battery run — confirmed.' to the file Projects/ariel-von-marlin.md."
+  expected_file: "Projects/ariel-von-marlin.md"
+  expected_content_fragment: "Ariel write gate battery run"
+  confirm_with: "yes"
+
+# AW006 — create insight at explicit path with content
+- id: AW006
+  type: write_exercise
+  vault: operator
+  query: >
+    Create a new insight note at Insights/ariel-write-gate-battery-test.md with
+    the content: 'Write gate wired and confirmed. Ariel path verified.'
+  expected_file: "Insights/ariel-write-gate-battery-test.md"
+  expected_content_fragment: "Ariel path verified"
+  confirm_with: "yes"
