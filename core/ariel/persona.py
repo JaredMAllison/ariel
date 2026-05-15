@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from pathlib import Path
 from .guard import ArielGuard
 from .memory import ArielMemory
@@ -24,7 +25,13 @@ class ArielOrchestrator(Orchestrator):
         # Initialize kb_core for vault search (replaces Loom dependency)
         self.kb = KnowledgeBase(Path(vault_path))
         self._write_parser = WriteIntentParser()
+
+        # Groq toggle — prefer Groq for Think/Respond if available
+        # Default: on (Groq preferred). Off = use priority-ordered backends (Ollama first)
+        raw = os.environ.get("PREFER_GROQ_FOR_THINK", "true")
+        self.prefer_groq_for_think = raw.strip().lower() in ("true", "1", "yes")
         logging.info(f"[Ariel] kb_core initialized — {len(self.kb.chunks)} chunks indexed")
+        logging.info(f"[Ariel] prefer_groq_for_think={self.prefer_groq_for_think}")
 
         # Prepend session context (if any) to the system prompt
         if not self.is_init_mode:
@@ -130,7 +137,7 @@ class ArielOrchestrator(Orchestrator):
         # === 1. Sanitize & Warn ===
         sanitized_input, warning_detected = self.guard.sanitize(user_message)
 
-        # === 2. Think (internal monologue) — Groq preferred ===
+        # === 2. Think (internal monologue) — Groq preferred (toggle via PREFER_GROQ_FOR_THINK) ===
         thinking_prompt = f"""You are Ariel's internal reasoning module.
 Analyze the user's message and identify what knowledge is missing to provide a grounded, neuro‑informed response.
 If you need to look up information in the vault, specify the tool calls you would make using these exact tool names:
@@ -157,7 +164,7 @@ If no external knowledge is needed, just output:
 Thought: No external lookup needed.
 
 User message: {sanitized_input}"""
-        thinking_response = self._call_backend(thinking_prompt, timeout, prefer_backend="groq")
+        thinking_response = self._call_backend(thinking_prompt, timeout, prefer_backend="groq" if self.prefer_groq_for_think else None)
         thought, tool_calls = self.thinker.extract_thoughts_and_tools(thinking_response)
 
         # === 3. Read (kb_core for search, base dispatch for I/O tools) with retry loop ===
@@ -246,7 +253,7 @@ User message: {sanitized_input}"""
         Original query: {sanitized_input}
         Tools tried: {[tc['name'] for tc in remaining_calls]}
         Try different search terms or a different tool. Output new Tool: calls only."""
-                retry_response = self._call_backend(retry_prompt, timeout, prefer_backend="groq")
+                retry_response = self._call_backend(retry_prompt, timeout, prefer_backend="groq" if self.prefer_groq_for_think else None)
                 _, remaining_calls = self.thinker.extract_thoughts_and_tools(retry_response)
                 if not remaining_calls:
                     break
@@ -254,7 +261,7 @@ User message: {sanitized_input}"""
 
         # === 4. Respond (grounded) ===
         grounded_input = f"{sanitized_input}\n\n[Relevant Vault Context]:\n{vault_context}" if vault_context else sanitized_input
-        response = self._call_backend_with_history(grounded_input, timeout, prefer_backend="groq")
+        response = self._call_backend_with_history(grounded_input, timeout, prefer_backend="groq" if self.prefer_groq_for_think else None)
 
         # === 5. Post-process warnings ===
         if warning_detected:
