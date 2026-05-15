@@ -25,6 +25,7 @@ class ArielOrchestrator(Orchestrator):
         # Initialize kb_core for vault search (replaces Loom dependency)
         self.kb = KnowledgeBase(Path(vault_path))
         self._write_parser = WriteIntentParser()
+        self._capture_pending = None  # multi-turn capture flow state: {"content": str, "target": str | None}
 
         # Groq toggle — prefer Groq for Think/Respond if available
         # Default: on (Groq preferred). Off = use priority-ordered backends (Ollama first)
@@ -39,6 +40,28 @@ class ArielOrchestrator(Orchestrator):
             session_prompt = self.session_yaml.format_session_prompt(session_context)
             if session_prompt:
                 self.system_prompt = f"{session_prompt}\n\n{self.system_prompt}"
+
+        # Replace generic LMF tool rules with Ariel-specific write gate behavior.
+        # The generic rules say "propose and wait" which contradicts Ariel's gate-first architecture.
+        import re as _re
+        # Strip the generic "# Tool Use Rules" section and its content
+        self.system_prompt = _re.sub(
+            r"\n# Tool Use Rules\n.*?(?=\n# |\Z)",
+            "",
+            self.system_prompt,
+            count=1,
+            flags=_re.DOTALL,
+        ).strip()
+        # Append Ariel-specific write gate rules
+        self.system_prompt += (
+            "\n\n---\n"
+            "## Write Gate Rules (Ariel)\n"
+            "All vault writes are gated by the system before your response. "
+            "You never need to propose, confirm, or discuss write operations "
+            "in natural language. The gate handles operator confirmation "
+            "automatically. If the gate did not produce a proposal, no write "
+            "occurred — respond normally without mentioning writes."
+        )
 
     def _call_backend(self, prompt: str, timeout: int = 300, prefer_backend: str | None = None) -> str:
         """Single backend call — does NOT append to history."""
@@ -96,6 +119,60 @@ class ArielOrchestrator(Orchestrator):
             kw in message.lower() for kw in ["build", "write", "create", "fix", "update", "add", "run"]
         )
 
+    def _handle_capture_response(self, message: str, timeout: int) -> str:
+        """Multi-turn capture flow state machine.
+
+        Step 1: detect_capture_flow() sets _capture_pending with content + target=None
+                → returns "Task, project, or inbox?"
+        Step 2: User responds with target type
+                → if content is a pronoun, asks for actual content
+                → if content is meaningful, writes directly
+        Step 3: User provides content → appends to Inbox.md, returns verification
+        """
+        pending = self._capture_pending
+        lowered = message.strip().lower().rstrip(".,! ")
+
+        # --- Step 2: User specified target type ---
+        if pending["target"] is None:
+            if lowered in ("inbox", "i"):
+                pending["target"] = "inbox"
+                if self._write_parser._is_reference_word(pending["content"]):
+                    self._capture_pending = pending
+                    return "What should I capture to inbox?"
+                content = pending["content"]
+                self._capture_pending = None
+                raw = self._dispatch_tool("append_to_file", {
+                    "file_path": "Inbox.md",
+                    "content": content + "\n",
+                })
+                return f"✓ Appended to Inbox.md"
+            elif lowered in ("task", "t"):
+                self._capture_pending = None
+                return "Task capture isn't wired yet — use a capture phrase."
+            elif lowered in ("project", "p"):
+                self._capture_pending = None
+                return "Project capture isn't wired yet — use a capture phrase."
+            else:
+                self._capture_pending = None
+                return "Didn't catch that. Message normally or use 'capture' phrases."
+
+        # --- Step 3: User provided content for inbox ---
+        if pending["target"] == "inbox":
+            content = message.strip()
+            if content:
+                self._capture_pending = None
+                raw = self._dispatch_tool("append_to_file", {
+                    "file_path": "Inbox.md",
+                    "content": content + "\n",
+                })
+                return f"✓ Appended to Inbox.md"
+            else:
+                self._capture_pending = None
+                return "Nothing to capture."
+
+        self._capture_pending = None
+        return "Capture cancelled."
+
     def chat(self, user_message: str, timeout: int = 300) -> str:
         # === Pending Insight Confirmation ===
         pending, updates = self.memory.get_pending_insight()
@@ -127,12 +204,27 @@ class ArielOrchestrator(Orchestrator):
                 self.pending_write = None
                 return "Okay, I won't make that change."
 
+        # === Capture Flow State — resume multi-turn capture ===
+        if self._capture_pending:
+            return self._handle_capture_response(user_message, timeout)
+
         # === Write Intent Detection ===
         intent = self._write_parser.parse(user_message)
         if intent:
             proposal = _format_proposal(intent.tool, intent.args)
             self.pending_write = {"name": intent.tool, "args": intent.args, "proposal": proposal}
             return proposal
+
+        # === Capture Flow Detection — generic "capture X" → marlin-capture ===
+        capture_content = self._write_parser.detect_capture_flow(user_message)
+        if capture_content:
+            self._capture_pending = {"content": capture_content, "target": None}
+            response = "Task, project, or inbox?"
+            self.history.append({"role": "user", "content": user_message})
+            self.history.append({"role": "assistant", "content": response})
+            if len(self.history) > 20:
+                self.history = self.history[-20:]
+            return response
 
         # === 1. Sanitize & Warn ===
         sanitized_input, warning_detected = self.guard.sanitize(user_message)
@@ -261,6 +353,10 @@ User message: {sanitized_input}"""
 
         # === 4. Respond (grounded) ===
         grounded_input = f"{sanitized_input}\n\n[Relevant Vault Context]:\n{vault_context}" if vault_context else sanitized_input
+        grounded_input += (
+            "\n\n[Gate note: No write was performed. "
+            "Do NOT mention or imply any write or capture in your response.]"
+        )
         response = self._call_backend_with_history(grounded_input, timeout, prefer_backend="groq" if self.prefer_groq_for_think else None)
 
         # === 5. Post-process warnings ===
