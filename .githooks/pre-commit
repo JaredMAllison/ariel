@@ -1,0 +1,11 @@
+#!/bin/sh
+branch="$(git rev-parse --abbrev-ref HEAD)"
+if [ "$branch" = "main" ]; then
+  echo "❌ Direct commits to main are not allowed."
+  echo "   Create a branch first:"
+  echo "     git checkout -b your-feature-branch"
+  echo ""
+  echo "   If this is a hotfix that genuinely must go to main, use --no-verify:"
+  echo "     git commit --no-verify"
+  exit 1
+fi
